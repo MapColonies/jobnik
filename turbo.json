@@ -28,6 +28,11 @@
       "dependsOn": ["^build"],
       "outputLogs": "errors-only"
     },
+    "check-pack": {
+      "dependsOn": ["^build", "build"],
+      "outputs": [],
+      "outputLogs": "errors-only"
+    },
     "format": {
       "dependsOn": [],
       "outputLogs": "errors-only"

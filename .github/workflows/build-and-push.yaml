@@ -241,6 +241,38 @@ jobs:
           paths: ${{ needs.determine-config.outputs.update_paths }}
 
   # ---------------------------------------------------------------------------
+  # Publish the SDK to npm — the only published package in this repository.
+  #
+  # Runs off the SDK's own release, independently of determine-config: the
+  # SDK is not in the `jobnik` linked-versions group (ticket 08), so it tags
+  # and releases on its own schedule (jobnik-sdk-vX.Y.Z) and this is the only
+  # job that reacts to that tag. Packaging and type-resolution are validated
+  # first (check-pack, run the same way any other task is: through turbo)
+  # so a package that would break consumers never reaches the registry.
+  # ---------------------------------------------------------------------------
+  publish-sdk:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'jobnik-sdk-v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Init nodejs
+        uses: ./.github/actions/init-pnpm
+
+      - name: Validate packaging and type resolution
+        run: pnpm exec turbo run check-pack --filter=@map-colonies/jobnik-sdk
+
+      - name: Configure npm registry auth
+        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to npm
+        working-directory: packages/jobnik-sdk
+        run: pnpm publish --no-git-checks --access public
+
+  # ---------------------------------------------------------------------------
   # Housekeeping — only on stable release.
   # When v0.1.2 is cut, qa and integration are still pointing at v0.1.2-rc.X.
   # This job auto-updates both to the new stable tag so they stay in sync.
