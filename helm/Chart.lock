@@ -1,0 +1,6 @@
+dependencies:
+- name: jobnik-manager
+  repository: file://../apps/jobnik-manager/helm
+  version: 0.2.1
+digest: sha256:3934298fd252937c66b23a2302d87073b2be213a99e93969e373581aab20b123
+generated: "2026-08-31T07:31:16.087901179+03:00"

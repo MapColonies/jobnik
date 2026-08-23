@@ -1,0 +1,10 @@
+apiVersion: v2
+name: jobnik
+description: Umbrella chart for the Jobnik product
+type: application
+version: 0.2.1
+dependencies:
+  - name: jobnik-manager
+    version: 0.2.1
+    repository: file://../apps/jobnik-manager/helm
+    condition: jobnik-manager.enabled

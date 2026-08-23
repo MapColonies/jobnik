@@ -1,0 +1,3 @@
+# Packaged local dependencies produced by `helm dependency build`/`update`.
+# Regenerated from the file:// reference in Chart.yaml; nothing to commit.
+charts/*.tgz
