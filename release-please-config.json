@@ -1,0 +1,135 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "changelog-sections": [
+    {
+      "section": "🎉 Features",
+      "type": "feat"
+    },
+    {
+      "section": "🐛 Bug Fixes",
+      "type": "fix"
+    },
+    {
+      "section": "⚡ Performance Improvements",
+      "type": "perf"
+    },
+    {
+      "section": "Helm Changes",
+      "type": "helm"
+    },
+    {
+      "section": "🔗 Dependencies",
+      "type": "deps"
+    },
+    {
+      "section": "🔗 Dev Dependencies",
+      "type": "devdeps",
+      "hidden": true
+    },
+    {
+      "section": "📝 Documentation",
+      "type": "docs"
+    },
+    {
+      "section": "🏗️ Build System",
+      "type": "build",
+      "hidden": true
+    },
+    {
+      "section": "🤖 Continuous Integration",
+      "type": "ci",
+      "hidden": true
+    },
+    {
+      "section": "🔧 Miscellaneous Chores",
+      "type": "chore",
+      "hidden": true
+    },
+    {
+      "section": "⏪ Reverts",
+      "type": "revert"
+    },
+    {
+      "section": "✅ Tests",
+      "type": "test",
+      "hidden": true
+    },
+    {
+      "section": "💄 Style",
+      "type": "style",
+      "hidden": true
+    },
+    {
+      "section": "♻️ Code Refactoring",
+      "type": "refactor",
+      "hidden": true
+    }
+  ],
+  "draft-pull-request": false,
+  "include-v-in-tag": true,
+  "separate-pull-requests": true,
+  "pull-request-title-pattern": "chore(release): ${component} ${version}",
+  "component-no-space": true,
+  "plugins": [
+    {
+      "type": "linked-versions",
+      "groupName": "jobnik",
+      "components": ["jobnik", "jobnik-manager", "jobnik-openapi"]
+    }
+  ],
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "component": "jobnik",
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "helm/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "helm/Chart.yaml",
+          "jsonpath": "$.dependencies[?(@.name==\"jobnik-manager\")].version"
+        }
+      ]
+    },
+    "apps/jobnik-manager": {
+      "release-type": "node",
+      "component": "jobnik-manager",
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "helm/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "helm/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        }
+      ]
+    },
+    "packages/jobnik-openapi": {
+      "release-type": "node",
+      "component": "jobnik-openapi",
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "openapi_v1.yaml",
+          "jsonpath": "$.info.version"
+        },
+        {
+          "type": "yaml",
+          "path": "openapi3.yaml",
+          "jsonpath": "$.info.version"
+        }
+      ]
+    },
+    "packages/jobnik-sdk": {
+      "release-type": "node",
+      "package-name": "@map-colonies/jobnik-sdk",
+      "component": "jobnik-sdk"
+    }
+  }
+}
