@@ -8,6 +8,7 @@ import { httpLogger } from '@map-colonies/express-access-log-middleware';
 import { getTraceContexHeaderMiddleware } from '@map-colonies/tracing-utils';
 import { collectMetricsExpressMiddleware } from '@map-colonies/prometheus';
 import { Registry } from 'prom-client';
+import { openapiFilePath } from 'jobnik-openapi';
 import { getErrorHandlerMiddleware } from '@common/utils/error-express-handler';
 import type { ConfigType } from '@common/config';
 import { SERVICES } from '@common/constants';
@@ -44,7 +45,7 @@ export class ServerBuilder {
   private buildDocsRoutes(): void {
     const openapiRouter = new OpenapiViewerRouter({
       ...this.config.get('openapiConfig'),
-      filePathOrSpec: this.config.get('openapiConfig.filePath'),
+      filePathOrSpec: openapiFilePath,
     });
     openapiRouter.setup();
     this.serverInstance.use(this.config.get('openapiConfig.basePath'), openapiRouter.getRouter());
@@ -84,9 +85,8 @@ export class ServerBuilder {
     this.serverInstance.use(getTraceContexHeaderMiddleware());
 
     const ignorePathRegex = new RegExp(`^${this.config.get('openapiConfig.basePath')}/.*`, 'i');
-    const apiSpecPath = this.config.get('openapiConfig.filePath');
     this.serverInstance.use(
-      OpenApiMiddleware({ apiSpec: apiSpecPath, validateSecurity: false, validateRequests: true, ignorePaths: ignorePathRegex })
+      OpenApiMiddleware({ apiSpec: openapiFilePath, validateSecurity: false, validateRequests: true, ignorePaths: ignorePathRegex })
     );
     this.serverInstance.use((req, res, next) => {
       req.passedValidation = true;

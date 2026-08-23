@@ -1,7 +1,4 @@
 {
-  "openapiConfig": {
-    "filePath": "OPENAPI_FILE_PATH"
-  },
   "telemetry": {
     "serviceName": "TELEMETRY_SERVICE_NAME",
     "hostname": "TELEMETRY_HOST_NAME",

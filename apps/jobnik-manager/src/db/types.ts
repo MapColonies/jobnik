@@ -1,5 +1,5 @@
 import type { Snapshot } from 'xstate';
-import type { components } from '@openapi';
+import type { components } from 'jobnik-openapi';
 import type { Prisma } from '@prismaClient';
 
 declare global {

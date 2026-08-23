@@ -1,6 +1,6 @@
 import type { Snapshot } from 'xstate';
+import type { components, operations } from 'jobnik-openapi';
 import type { Prisma, TaskOperationStatus } from '@prismaClient';
-import type { components, operations } from '@src/openapi';
 import type { JobPrismaObject } from '@src/jobs/models/models';
 import type { PrismaTransaction } from '@src/db/types';
 

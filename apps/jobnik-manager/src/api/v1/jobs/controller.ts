@@ -2,7 +2,7 @@ import type { Logger } from '@map-colonies/js-logger';
 import httpStatus from 'http-status-codes';
 import { injectable, inject } from 'tsyringe';
 import { HttpError } from '@map-colonies/error-express-handler';
-import type { TypedRequestHandlers } from '@openapi';
+import type { TypedRequestHandlers } from 'jobnik-openapi';
 import { SERVICES, successMessages } from '@common/constants';
 import { SamePriorityChangeError } from '@src/jobs/models/errors';
 import { IllegalJobStatusTransitionError, JobNotInFiniteStateError, JobNotFoundError } from '@src/common/generated/errors';

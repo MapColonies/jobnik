@@ -1,7 +1,8 @@
 import { generateErrors, generateTypes } from '@map-colonies/openapi-helpers/generators';
 import { factory } from 'typescript';
+import { openapiFilePath } from 'jobnik-openapi';
 
-const OPENAPI_PATH = 'src/openapi3.yaml';
+const OPENAPI_PATH = openapiFilePath;
 const TYPES_DESTINATION_PATH = 'src/types/openapi.ts';
 const ERRORS_DESTINATION_PATH = 'src/generated/openapi-errors.ts';
 

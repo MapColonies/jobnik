@@ -65,7 +65,6 @@ export default defineConfig({
       exclude: [
         '**/vendor/**',
         'node_modules/**',
-        '**/openapi.d.ts',
         '**/index.ts',
         '**/constants.ts',
         '**/dependencyRegistration.ts',

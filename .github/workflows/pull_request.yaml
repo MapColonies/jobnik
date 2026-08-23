@@ -21,6 +21,8 @@ jobs:
             name: Type-check
           - task: lint:openapi
             name: Specification lint
+          - task: generate:check
+            name: Specification drift
     steps:
       - name: Check out repository
         uses: actions/checkout@v6

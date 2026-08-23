@@ -1,5 +1,5 @@
+import type { components, operations } from 'jobnik-openapi';
 import type { Prisma } from '@prismaClient';
-import type { components, operations } from '@src/openapi';
 
 type TaskModel = components['schemas']['taskResponse'];
 type TaskCreateModel = components['schemas']['createTaskPayload'];

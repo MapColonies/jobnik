@@ -95,47 +95,8 @@ _**Create new migration on modified schema**_
 
 ## API Versioning
 
-The API supports multiple versions through a unified OpenAPI specification. Version-specific endpoints are automatically generated and merged.
-
-**File Structure:**
-
-- Source files: `openapi_v1.yaml`, `openapi_v2.yaml`, etc. (contain unversioned paths)
-- Generated output: `openapi3.yaml` (contains all versions with `/v1/`, `/v2/` prefixes)
-
-**Building the API Specification:**
-
-```bash
-npm run openapi:build
-```
-
-This command:
-
-1. Discovers all `openapi_v{number}.yaml` files
-2. Adds version prefixes to paths (e.g., `/jobs` → `/v1/jobs`, `/v2/jobs`)
-3. Adds version suffixes to operationIds (e.g., `findJobs` → `findJobsV1`, `findJobsV2`)
-4. Merges all versions into a single `openapi3.yaml` file
-5. Automatically cleans up temporary files
-
-**Adding a New API Version:**
-
-1. Create a new file named `openapi_v{number}.yaml` (e.g., `openapi_v3.yaml`)
-2. Define your API endpoints with **unversioned paths** (e.g., `/jobs`, not `/v3/jobs`)
-3. Run `npm run openapi:build`
-4. The script will automatically discover and merge the new version
-
-Example `openapi_v3.yaml`:
-
-```yaml
-openapi: 3.0.1
-info:
-  title: Job Manager Service - API v3
-  description: Job Manager Service API version 3
-  version: 0.1.0
-paths:
-  /jobs: # Don't add /v3/ prefix - the script does this automatically
-    get:
-      operationId: findJobs # Don't add V3 suffix - the script does this automatically
-      # ... rest of your endpoint definition
-```
-
-> **Note:** Always define paths without version prefixes in the source files. The build script automatically adds `/v1/`, `/v2/`, etc. prefixes and version suffixes to operation IDs.
+The manager takes its OpenAPI specification, and the request/response types generated from
+it, from the `jobnik-openapi` workspace package (`packages/jobnik-openapi`) as a runtime
+dependency — resolved through the module system rather than through a copy of the file living
+here. The specification's versioned source files, its build, and how to add a new API
+version are documented in that package's `README.md`.
