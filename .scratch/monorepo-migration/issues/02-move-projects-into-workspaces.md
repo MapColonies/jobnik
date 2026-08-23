@@ -8,6 +8,12 @@ Dependency versions are not touched. The workspaces disagree on several today; a
 
 **Precondition (human):** the three source repositories are frozen before anything is imported, and the imported commit of each is recorded in this ticket. The e2e suite is the fastest-moving of the three, which is why the freeze must precede the move rather than follow it.
 
+Imported commits (each matches its repository's `origin` HEAD at import time — no unpushed local work):
+
+- `jobnik-manager`: `e22e59c732801addc948351f1d696671ae14347b`
+- `jobnik-sdk`: `de436ab9c4acc4175eed721c532dde8dad3ac5dc`
+- `jobnik-e2e`: `11392f79df73595a6ebc4aee34df2d5b23a45069`
+
 **Blocked by:** 01 (scaffold the monorepo).
 
 **Branch:** `migration/02-move-workspaces`, layer 2 of 13, based on `migration/01-scaffold`. Stack conventions: `../stack.md`.

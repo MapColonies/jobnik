@@ -1,0 +1,9 @@
+{
+  "staleTasksSweeperCron": {
+    "enabled": false,
+    "schedule": "0 * * * *"
+  },
+  "task": {
+    "staleTaskThresholdInMinutes": 1
+  }
+}

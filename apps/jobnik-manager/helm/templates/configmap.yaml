@@ -1,0 +1,46 @@
+{{- $tracingUrl := include "jobnik-manager.tracingUrl" . -}}
+{{- $metricsUrl := include "jobnik-manager.metricsUrl" . -}}
+{{- if .Values.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-configmap" (include "jobnik-manager.fullname" .) }}
+data:
+  npm_config_cache: /tmp/
+  {{- if .Values.env.configManager.offlineMode }}
+  REQUEST_PAYLOAD_LIMIT: {{ .Values.env.requestPayloadLimit | quote }}
+  RESPONSE_COMPRESSION_ENABLED: {{ .Values.env.responseCompressionEnabled | quote }}
+  LOG_LEVEL: {{ .Values.env.logLevel | quote }}
+  LOG_PRETTY_PRINT_ENABLED: {{ .Values.env.logPrettyPrintEnabled | quote }}
+  {{- if .Values.env.tracing.enabled }}
+  TELEMETRY_TRACING_ENABLED: 'true'
+  TELEMETRY_TRACING_URL: {{ $tracingUrl }}
+  {{- end }}
+  {{- if .Values.env.metrics.enabled }}
+  TELEMETRY_METRICS_ENABLED: 'true'
+  TELEMETRY_METRICS_URL: {{ $metricsUrl }}
+  {{- end }}
+  {{- with .Values.dbConfig }}
+  DB_HOST: {{ .host }}
+  DB_NAME: {{ .database }}
+  DB_PORT: {{ .port | default 5432 | quote }}
+  {{- if .sslAuth.enabled }}
+  DB_ENABLE_SSL_AUTH: "true"
+  DB_CERT_PATH: /tmp/certs/{{ .sslAuth.certFileName }}
+  DB_KEY_PATH: /tmp/certs/{{ .sslAuth.keyFileName }}
+  DB_CA_PATH: /tmp/certs/{{ .sslAuth.caFileName }}
+  {{- else }}
+  DB_ENABLE_SSL_AUTH: "false"
+  {{- end }}
+  {{- end }}
+  STALE_TASKS_SWEEPER_CRON_ENABLED: {{ $.Values.staleTasksSweeperCron.enabled | quote }}
+  STALE_TASKS_SWEEPER_CRON_SCHEDULE: {{ $.Values.staleTasksSweeperCron.schedule | quote }}
+  TASK_STALE_THRESHOLD_IN_MINUTES: {{ $.Values.task.staleTaskThresholdInMinutes | quote }}
+  {{- end }}
+  {{- with .Values.env.configManager }}
+  CONFIG_NAME: {{ .name | quote }}
+  CONFIG_VERSION: {{ .version | quote }}
+  CONFIG_OFFLINE_MODE: {{ .offlineMode | quote }}
+  CONFIG_SERVER_URL: {{ .serverUrl | quote }}
+  {{- end }}
+{{- end }}

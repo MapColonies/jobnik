@@ -1,0 +1,15 @@
+# This is a Docker Compose configuration file for setting up a PostgreSQL database for testing purposes.
+# Do not use this configuration in production environments as it is optimized for testing and may disable important features like fsync.
+services:
+  postgresql:
+    image: postgres:15
+    ports:
+      - '${POSTGRES_PORT}:5432'
+    container_name: 'postgres-for-testing'
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=jobnik
+    command: postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c random_page_cost=1.0
+    # Disable features to improve performance in tests
+    tmpfs: /var/lib/postgresql/data
