@@ -24,3 +24,7 @@ The composition file stays inside the e2e workspace and must never move to the r
 - [ ] The composition file is still inside the e2e workspace, and the manager's integration tests are unaffected.
 - [ ] The suite is reachable as a task through the single entry point, locally as well as in continuous integration.
 - [ ] The work sits on `migration/06-e2e-gate` as layer 6 of the stack, its pull request is based on `migration/05-container-image`, and that pull request's own diff contains nothing from the layers below it.
+
+## Comments
+
+**From ticket 05:** the runtime image's migration command-line tool is pulled in with `npx prisma@6 ...`, pinned to the major version, not bare `npx prisma ...`. Prisma 7 (already the `latest` tag on npm) rejects the `url` field in the schema's `datasource` block, so an unpinned `npx prisma` resolves the new major and fails outright — this was verified by hand while building the image (it's what the old, pre-migration Dockerfile would have hit too, on its first rebuild after Prisma 7 shipped; it happened to precede that release). The migration runner's compose command must use the same `prisma@6` pin, or it will fail the moment the image is rebuilt fresh — the `npx` cache seeded during the image build is keyed to the exact `prisma@6` spec, so a bare `prisma` in the migrator's command won't even reuse it.
