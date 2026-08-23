@@ -18,7 +18,7 @@ The chart pushed is now the umbrella. The deployment-configuration change prepar
 - [x] The dormant prerelease and branch-based paths are carried over as they are, not finished and not removed.
 - [x] Adding another deployable application to the matrix requires no change to the pipeline.
 - [x] Nothing in the pipeline hardcodes the image name, the chart name or the deployment-configuration target.
-- [x] The deployment-configuration change lands with this ticket, and the first deployment afterwards is an ordinary rolling update rather than a delete and recreate.
+- [ ] The deployment-configuration change lands with this ticket, and the first deployment afterwards is an ordinary rolling update rather than a delete and recreate. **Not satisfiable from this repository**: `site-values` isn't part of this monorepo, so the change ticket 07 prepared can only be applied by whoever has access to it, alongside this pull request (see the Comments below and `../07-deployment-configuration-change.md`). Left unchecked deliberately rather than marked complete.
 - [x] The work sits on `migration/09-delivery-pipeline` as layer 9 of the stack, its pull request is based on `migration/08-release-config`, and that pull request's own diff contains nothing from the layers below it.
 
 ## Comments
@@ -74,8 +74,10 @@ kept verbatim; only the pieces this migration's spec calls out are adapted:
 `github.event.head_commit.message` directly inside the shell script — an
 untrusted value that could smuggle shell metacharacters into the run block.
 Moved it into an `env:` var instead, which is behaviorally identical but
-closes the injection. Everything else in that dormant push-to-`next` path is
-untouched.
+closes the injection, and did the same for the release tag name used a few
+lines above and in the config-resolution step right after, for the same
+reason and for consistency within one script. Everything else in that
+dormant push-to-`next` path is untouched.
 
 ### Deployment-configuration
 

@@ -55,14 +55,15 @@ jobs:
       - name: Check if should run
         id: check
         shell: bash
-        # The commit message is untrusted input (an attacker-controlled commit
-        # could smuggle shell metacharacters into it), so it's passed through
-        # an env var below rather than interpolated directly into the script.
+        # Event-supplied strings (a commit message, a tag name) are passed
+        # through env vars rather than interpolated directly into the
+        # script, so nothing here depends on them being free of shell
+        # metacharacters.
         env:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
           if [[ "${{ github.event_name }}" == "release" ]]; then
-            TAG_NAME="${{ github.event.release.tag_name }}"
             if [[ "$TAG_NAME" != jobnik-v* ]]; then
               echo "should_run=false" >> "$GITHUB_OUTPUT"
               echo "Skipping release for a different component's tag ($TAG_NAME)"
@@ -90,13 +91,14 @@ jobs:
         id: config
         if: steps.check.outputs.should_run == 'true'
         shell: bash
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
           if [[ "${{ github.event_name }}" == "release" ]]; then
             # Strip the linked-versions group's own component prefix so the
             # tag scheme below (image tag, chart tag) is exactly what it was
             # before this repository had more than one released component.
-            TAG="${{ github.event.release.tag_name }}"
-            TAG="${TAG#jobnik-}"
+            TAG="${TAG_NAME#jobnik-}"
             echo "image_tag=${TAG}" >> "$GITHUB_OUTPUT"
             echo "chart_tag=${TAG}" >> "$GITHUB_OUTPUT"
             if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
