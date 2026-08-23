@@ -1,0 +1,268 @@
+name: Build and Push Artifacts
+
+on:
+  push:
+    branches:
+      - next
+  release:
+    types: [published]
+
+concurrency:
+  group: build-and-push-${{ github.ref }}
+  cancel-in-progress: false # false to queue, not cancel
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  DOMAIN: infra
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Determine what triggered us and resolve all config up front.
+  #
+  # Three possible paths, carried over unchanged from the manager's own
+  # former pipeline:
+  #   1. push to next  (developer commit)   → dev,  tag = next-{sha}
+  #   2. release, prerelease=true           → qa,   tag = v0.1.2-rc.10
+  #   3. release, prerelease=false          → prod, tag = v0.1.2
+  #                                            + housekeeping: update qa & int
+  #
+  # The push-to-next path must skip commits from mapcolonies[bot]
+  # (the empty "Release-As" footer commits from smart-release-please).
+  #
+  # New in the monorepo: the manager, the specification package and the
+  # repository root release together as one linked-versions group
+  # (release-please-config.json), so one version bump produces a separate
+  # GitHub Release, and a separate `release` webhook, per component in that
+  # group — jobnik-vX.Y.Z, jobnik-manager-vX.Y.Z and jobnik-openapi-vX.Y.Z all
+  # land at once. Only the group's own tag (jobnik-vX.Y.Z) drives delivery;
+  # the other two are the same release arriving under different names, not
+  # separate things to build and ship.
+  # ---------------------------------------------------------------------------
+  determine-config:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      image_tag: ${{ steps.config.outputs.image_tag }}
+      chart_tag: ${{ steps.config.outputs.chart_tag }}
+      environment: ${{ steps.config.outputs.environment }}
+      pr_labels: ${{ steps.config.outputs.pr_labels }}
+      update_paths: ${{ steps.config.outputs.update_paths }}
+      is_stable: ${{ steps.config.outputs.is_stable }}
+    steps:
+      - name: Check if should run
+        id: check
+        shell: bash
+        # The commit message is untrusted input (an attacker-controlled commit
+        # could smuggle shell metacharacters into it), so it's passed through
+        # an env var below rather than interpolated directly into the script.
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAG_NAME="${{ github.event.release.tag_name }}"
+            if [[ "$TAG_NAME" != jobnik-v* ]]; then
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              echo "Skipping release for a different component's tag ($TAG_NAME)"
+              exit 0
+            fi
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # For push to next: skip bot commits
+          # Skip if commit message contains bot indicators
+          if [[ "$COMMIT_MSG" == *"Release-As:"* ]] || \
+             [[ "$COMMIT_MSG" == "chore: enforce correct rc version"* ]] || \
+             [[ "$COMMIT_MSG" == *"chore(next): release"* ]] || \
+             [[ "$COMMIT_MSG" == *"chore: release"* ]] || \
+             [[ "$COMMIT_MSG" == "Merge branch 'master' into next"* ]]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping bot commit"
+            exit 0
+          fi
+
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve config
+        id: config
+        if: steps.check.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            # Strip the linked-versions group's own component prefix so the
+            # tag scheme below (image tag, chart tag) is exactly what it was
+            # before this repository had more than one released component.
+            TAG="${{ github.event.release.tag_name }}"
+            TAG="${TAG#jobnik-}"
+            echo "image_tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "chart_tag=${TAG}" >> "$GITHUB_OUTPUT"
+            if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
+              ENV="qa"
+              echo "is_stable=false" >> "$GITHUB_OUTPUT"
+            else
+              ENV="prod"
+              echo "is_stable=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            # push to next → dev
+            ENV="dev"
+            echo "image_tag=next-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            echo "chart_tag=0.0.0-next-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            echo "is_stable=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Set environment-based outputs
+          echo "environment=${ENV}" >> "$GITHUB_OUTPUT"
+          echo "update_paths=infra/environments/${ENV}.yaml" >> "$GITHUB_OUTPUT"
+
+          # Set PR labels (dev gets auto-merge)
+          if [[ "${ENV}" == "dev" ]]; then
+            echo "pr_labels=${ENV}, auto-merge" >> "$GITHUB_OUTPUT"
+          else
+            echo "pr_labels=${ENV}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Generate the container build matrix from the deployed applications.
+  #
+  # Every deployed app declares which Dockerfile builds it via its own
+  # package.json (see apps/jobnik-manager/package.json's `dockerfile` field),
+  # so a second deployable app joins this matrix with no change here or in
+  # the job below: image name, chart name and deployment-configuration target
+  # all keep resolving from data, not from anything hardcoded in this file.
+  # ---------------------------------------------------------------------------
+  generate-matrix:
+    needs: determine-config
+    if: needs.determine-config.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Init nodejs
+        uses: ./.github/actions/init-pnpm
+
+      - name: Generate build matrix
+        id: set-matrix
+        shell: bash
+        run: |
+          MATRIX_JSON=$(node scripts/generate-matrix.mjs)
+          echo "matrix=$MATRIX_JSON" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Build & push a Docker image for every deployed application in the matrix.
+  # ---------------------------------------------------------------------------
+  push-docker-image:
+    runs-on: ubuntu-latest
+    needs: [determine-config, generate-matrix]
+    if: needs.determine-config.outputs.should_run == 'true'
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login to ACR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ secrets.ACR_URL }}
+          username: ${{ secrets.ACR_PUSH_USER }}
+          password: ${{ secrets.ACR_PUSH_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          build-args: |
+            APP_NAME=${{ matrix.service }}
+          push: true
+          tags: ${{ secrets.ACR_URL }}/${{ env.DOMAIN }}/${{ matrix.service }}:${{ needs.determine-config.outputs.image_tag }}
+
+  # ---------------------------------------------------------------------------
+  # Build & push the umbrella Helm chart.
+  # ---------------------------------------------------------------------------
+  push-helm-package:
+    runs-on: ubuntu-latest
+    if: needs.determine-config.outputs.should_run == 'true'
+    needs: [determine-config]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.4
+
+      - name: Push chart to ACR
+        uses: appany/helm-oci-chart-releaser@v0.5.0
+        with:
+          name: ${{ github.event.repository.name }}
+          repository: helm/${{ env.DOMAIN }}
+          tag: ${{ needs.determine-config.outputs.chart_tag }}
+          path: ./helm
+          registry: ${{ secrets.ACR_URL }}
+          registry_username: ${{ secrets.ACR_PUSH_USER }}
+          registry_password: ${{ secrets.ACR_PUSH_TOKEN }}
+          update_dependencies: 'true'
+
+  # ---------------------------------------------------------------------------
+  # Open the PR in site-values for the target environment.
+  #
+  #   dev  → auto-merge (labels: "dev")
+  #   prod → manual     (labels: "prod")
+  # ---------------------------------------------------------------------------
+  update-site-values:
+    runs-on: ubuntu-latest
+    needs: [determine-config, push-docker-image, push-helm-package]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Open / update site-values PR
+        uses: MapColonies/shared-workflows/actions/update-chart-version@update-chart-version-v0.1.0
+        with:
+          tag: ${{ needs.determine-config.outputs.chart_tag }}
+          repository: site-values
+          github_token: ${{ secrets.GH_PAT }}
+          chart: ${{ github.event.repository.name }}
+          environment: ${{ needs.determine-config.outputs.environment }}
+          pr_labels: ${{ needs.determine-config.outputs.pr_labels }}
+          paths: ${{ needs.determine-config.outputs.update_paths }}
+
+  # ---------------------------------------------------------------------------
+  # Housekeeping — only on stable release.
+  # When v0.1.2 is cut, qa and integration are still pointing at v0.1.2-rc.X.
+  # This job auto-updates both to the new stable tag so they stay in sync.
+  # ---------------------------------------------------------------------------
+  housekeeping-update-qa-and-integration:
+    runs-on: ubuntu-latest
+    needs: [determine-config, push-helm-package, push-docker-image]
+    if: needs.determine-config.outputs.is_stable == 'true'
+    strategy:
+      matrix:
+        env_name: [qa, integration]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Update ${{ matrix.env_name }} to stable tag
+        uses: MapColonies/shared-workflows/actions/update-chart-version@update-chart-version-v0.1.0
+        with:
+          tag: ${{ needs.determine-config.outputs.chart_tag }}
+          repository: site-values
+          github_token: ${{ secrets.GH_PAT }}
+          chart: ${{ github.event.repository.name }}
+          environment: ${{ matrix.env_name }}
+          pr_labels: ${{ matrix.env_name }}, auto-merge
+          paths: infra/environments/${{ matrix.env_name }}.yaml
