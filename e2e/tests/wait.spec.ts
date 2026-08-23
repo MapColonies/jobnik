@@ -38,18 +38,14 @@ describe('wait test', () => {
 
     //#region create stage
     const stageSampleData = createStageData();
+    // startAsWaiting creates the stage as WAITING directly; the status endpoint only accepts
+    // PENDING (WAITING is system-managed), so there is no user-facing way to set it here.
     const stage = await producer.createStage(job.id, stageSampleData, true);
-    await api.PUT('/v1/stages/{stageId}/status', {
-      body: { status: 'WAITING' },
-      params: { path: { stageId: stage.id } },
-    });
 
     const taskSampleData = createTaskData();
-    const task = await producer.createTasks(stage.id, stage.type, [taskSampleData]);
-    await api.PUT('/v1/tasks/{taskId}/status', {
-      body: { status: 'PENDING' },
-      params: { path: { taskId: task[0]!.id } },
-    });
+    // Tasks are created PENDING already, even under a WAITING stage; the status endpoint only
+    // accepts COMPLETED/FAILED, so there is no user-facing way to set PENDING here.
+    await producer.createTasks(stage.id, stage.type, [taskSampleData]);
     //#endregion
     const dequeueResult = await consumer.dequeueTask(stage.type);
 
