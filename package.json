@@ -24,6 +24,7 @@
     "e2e": "turbo run e2e",
     "check-dist": "turbo run check-dist",
     "knip": "knip",
+    "verify": "turbo run format lint type-check build test",
     "docs": "typedoc"
   },
   "devDependencies": {
