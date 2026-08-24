@@ -204,4 +204,4 @@ export function createRetryAgent(options: HttpClientOptions = {}, logger: Logger
   return retryAgent;
 }
 
-export type { HttpClientOptions, RetryOptions };
+export type { HttpClientOptions };

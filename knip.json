@@ -1,4 +1,22 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreDependencies": ["@commitlint/cli", "prettier", "pretty-quick"]
+  "workspaces": {
+    "apps/jobnik-manager": {
+      "entry": ["src/instrumentation.mts"],
+      "ignore": ["src/db/prisma/generated/**", "src/common/generated/**"],
+      "ignoreUnresolved": ["./instrumentation.mjs"],
+      "ignoreDependencies": ["@map-colonies/prettier-config", "@types/express-serve-static-core", "@types/multer", "@types/swagger-ui-express"]
+    },
+    "packages/jobnik-openapi": {
+      "ignoreDependencies": ["@map-colonies/prettier-config"]
+    },
+    "packages/jobnik-sdk": {
+      "entry": ["tests/**/*.test-d.ts"],
+      "ignore": ["src/types/openapi.ts"],
+      "ignoreDependencies": ["@map-colonies/prettier-config"]
+    },
+    "e2e": {
+      "ignoreDependencies": ["jobnik-manager"]
+    }
+  }
 }

@@ -1,6 +1,6 @@
 declare const brand: unique symbol;
 
-export type Brand<T, Brand extends string> = T & { [brand]: Brand };
+type Brand<T, Brand extends string> = T & { [brand]: Brand };
 
 /**
  * Branded type for job identifiers.

@@ -1,10 +1,11 @@
 import { context, propagation } from '@opentelemetry/api';
 
-export const DEFAULT_TRACEPARENT = '00-00000000000000000000000000000000-0000000000000000-00';
-export interface Carrier {
+interface Carrier {
   traceparent?: string;
   tracestate?: string;
 }
+
+export const DEFAULT_TRACEPARENT = '00-00000000000000000000000000000000-0000000000000000-00';
 
 /**
  * Type that ensures traceparent is required and tracestate is nullable
@@ -44,9 +45,3 @@ export function resolveTraceContext(payload: OptionalTraceContext): ResolvedTrac
     tracestate: traceContext.tracestate ?? null,
   };
 }
-
-/**
- * Type helper that transforms a payload with optional trace context into one with required trace context.
- * This ensures type safety when passing data to Prisma which requires these fields.
- */
-export type WithRequiredTraceContext<T extends OptionalTraceContext> = Omit<T, 'traceparent' | 'tracestate'> & ResolvedTraceContext;

@@ -1,4 +1,3 @@
-import type { Snapshot } from 'xstate';
 import type { components, operations } from 'jobnik-openapi';
 import type { Prisma, TaskOperationStatus } from '@prismaClient';
 import type { JobPrismaObject } from '@src/jobs/models/models';
@@ -6,7 +5,6 @@ import type { PrismaTransaction } from '@src/db/types';
 
 type StageModel = components['schemas']['getStageResponse'];
 type StageCreateModel = components['schemas']['createStagePayloadRequest'];
-type StageCreateBody = StageCreateModel & { jobId: string; xstate: Snapshot<unknown> };
 type StageSummary = components['schemas']['summary'];
 type StageFindCriteriaArg = operations['getStagesV1']['parameters']['query'];
 type StagesPaginatedResponse = components['schemas']['stagesPaginatedResponse'];
@@ -42,7 +40,6 @@ export type {
   StageFindCriteriaArg,
   StageCreateModel,
   StagePrismaObject,
-  StageCreateBody,
   UpdateSummaryCount,
   StageIncludingJob,
   StageEntityOptions,

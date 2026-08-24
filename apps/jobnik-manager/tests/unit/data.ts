@@ -29,18 +29,14 @@ failedStageActor.send({ type: 'pend' });
 failedStageActor.send({ type: 'process' });
 failedStageActor.send({ type: 'fail' });
 
-const waitingStageActor = createActor(stageStateMachine).start();
-waitingStageActor.send({ type: 'wait' });
-
 const retriedTaskActor = createActor(taskStateMachine).start();
 retriedTaskActor.send({ type: 'pend' });
 retriedTaskActor.send({ type: 'process' });
 retriedTaskActor.send({ type: 'retry' });
 
-export const jobId = faker.string.uuid();
-export const stageId = faker.string.uuid();
-export const anotherStageId = faker.string.uuid();
+const stageId = faker.string.uuid();
 
+export const jobId = faker.string.uuid();
 export const jobEntityWithoutStages = createJobEntity({ id: jobId });
 export const stageEntity = createStageEntity({ id: stageId, jobId, data: { name: 'someStage' } });
 
@@ -55,7 +51,6 @@ export const inProgressStageXstatePersistentSnapshot = runningStageActor.getPers
 export const abortedStageXstatePersistentSnapshot = abortedStageActor.getPersistedSnapshot();
 export const pendingStageXstatePersistentSnapshot = pendingStageActor.getPersistedSnapshot();
 export const failedStageXstatePersistentSnapshot = failedStageActor.getPersistedSnapshot();
-export const waitingStageXstatePersistentSnapshot = waitingStageActor.getPersistedSnapshot();
 export const retryTaskXstatePersistentSnapshot = retriedTaskActor.getPersistedSnapshot();
 export const completedStageXstatePersistentSnapshot = completedStageActor.getPersistedSnapshot();
 

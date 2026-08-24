@@ -3,7 +3,6 @@ import type { Prisma } from '@prismaClient';
 
 type JobModel = components['schemas']['job'];
 type JobCreateModel = components['schemas']['createJobPayload'];
-type JobGetParams = components['parameters'];
 type JobFindCriteriaArg = operations['findJobsV1']['parameters']['query'];
 type JobsPaginatedResponse = components['schemas']['jobsPaginatedResponse'];
 
@@ -15,4 +14,4 @@ type JobPrismaObject<IncludeStages extends boolean = boolean> = Prisma.JobGetPay
   include: { stage: IncludeStages };
 }>;
 
-export type { JobModel, JobCreateModel, JobGetParams, JobFindCriteriaArg, JobPrismaObject, JobsPaginatedResponse };
+export type { JobModel, JobCreateModel, JobFindCriteriaArg, JobPrismaObject, JobsPaginatedResponse };

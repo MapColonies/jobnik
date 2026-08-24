@@ -1,5 +1,5 @@
 import { hostname } from 'node:os';
-import { Span, SpanOptions, SpanStatusCode, trace, context, SpanContext, propagation } from '@opentelemetry/api';
+import { Span, SpanOptions, SpanStatusCode, trace, SpanContext } from '@opentelemetry/api';
 import { readPackageJsonSync } from '@map-colonies/read-pkg';
 import { Logger } from '../types';
 import { ATTR_MESSAGING_CLIENT_ID, ATTR_MESSAGING_SYSTEM } from './semconv';
@@ -8,6 +8,40 @@ import { ATTR_MESSAGING_CLIENT_ID, ATTR_MESSAGING_SYSTEM } from './semconv';
 const packageJson = readPackageJsonSync();
 const SDK_INSTRUMENTATION_SCOPE = packageJson.name ?? 'unknown-sdk';
 const SDK_VERSION = packageJson.version ?? 'unknown-version';
+
+/**
+ * Ends the given span with status OK
+ * @param span span to be ended
+ * @group Tracing Utilities
+ */
+const handleSpanOnSuccess = (span: Span | undefined): void => {
+  if (!span) {
+    return;
+  }
+
+  span.setStatus({ code: SpanStatusCode.OK });
+  span.end();
+};
+
+/**
+ * Ends the given span with status ERROR and records the error
+ * @param span span to be ended
+ * @param error error to be recorded
+ * @group Tracing Utilities
+ */
+const handleSpanOnError = (span: Span | undefined, error?: unknown): void => {
+  if (!span) {
+    return;
+  }
+
+  span.setStatus({ code: SpanStatusCode.ERROR });
+
+  if (error instanceof Error) {
+    span.recordException(error);
+  }
+
+  span.end();
+};
 
 export const DEFAULT_SPAN_CONTEXT: SpanContext = {
   traceId: '00000000000000000000000000000000',
@@ -19,11 +53,6 @@ export const BASE_ATTRIBUTES = {
   [ATTR_MESSAGING_SYSTEM]: 'jobnik',
   [ATTR_MESSAGING_CLIENT_ID]: hostname(),
 };
-
-export function getSpanContext(carrier: unknown): SpanContext | undefined {
-  const remoteContext = propagation.extract(context.active(), carrier);
-  return trace.getSpanContext(remoteContext);
-}
 
 export async function withSpan<T>(spanName: string, spanOptions: SpanOptions, logger: Logger, fn: (span: Span) => Promise<T>): Promise<T> {
   if (spanOptions.attributes) {
@@ -42,40 +71,6 @@ export async function withSpan<T>(spanName: string, spanOptions: SpanOptions, lo
     }
   });
 }
-
-/**
- * Ends the given span with status OK
- * @param span span to be ended
- * @group Tracing Utilities
- */
-export const handleSpanOnSuccess = (span: Span | undefined): void => {
-  if (!span) {
-    return;
-  }
-
-  span.setStatus({ code: SpanStatusCode.OK });
-  span.end();
-};
-
-/**
- * Ends the given span with status ERROR and records the error
- * @param span span to be ended
- * @param error error to be recorded
- * @group Tracing Utilities
- */
-export const handleSpanOnError = (span: Span | undefined, error?: unknown): void => {
-  if (!span) {
-    return;
-  }
-
-  span.setStatus({ code: SpanStatusCode.ERROR });
-
-  if (error instanceof Error) {
-    span.recordException(error);
-  }
-
-  span.end();
-};
 
 /**
  * @remarks

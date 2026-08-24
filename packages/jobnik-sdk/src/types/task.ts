@@ -11,8 +11,6 @@ export interface TaskData {
   data: TaskPayload;
 }
 
-export type ValidTaskType<TaskTypes> = Extract<keyof TaskTypes, string> | (string & {});
-
 export type InferTaskData<StageType, StageTypes extends StageTypesTemplate<StageTypes>> =
   StageType extends Extract<keyof StageTypes, string> ? StageTypes[StageType]['task'] : TaskData;
 

@@ -4,7 +4,6 @@ import type { Prisma, Stage, Task } from '@prismaClient';
 import { JobOperationStatus, Priority, StageOperationStatus, TaskOperationStatus } from '@prismaClient';
 import type { findAndLockTask } from '@src/db/prisma/generated/client/sql';
 import { jobStateMachine } from '@src/jobs/models/jobStateMachine';
-import type { JobCreateModel } from '@src/jobs/models/models';
 import { stageStateMachine } from '@src/stages/models/stageStateMachine';
 import type { TaskPrismaObject } from '@src/tasks/models/models';
 import { taskStateMachine } from '@src/tasks/models/taskStateMachine';
@@ -21,12 +20,6 @@ export interface JobWithStages extends Prisma.JobGetPayload<Record<string, unkno
 export interface StageWithTasks extends Prisma.StageGetPayload<Record<string, unknown>> {
   task?: Task[];
 }
-
-export const createJobParams = {
-  name: 'DEFAULT',
-  data: { stages: [] },
-  userMetadata: {},
-} satisfies JobCreateModel;
 
 export function createJobEntity(override: Partial<JobWithStages>): JobWithStages {
   const jobEntity = {
