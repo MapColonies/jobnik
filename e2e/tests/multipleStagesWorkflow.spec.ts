@@ -28,26 +28,29 @@ describe('Multiple Stages Workflow Tests', () => {
     const [task1] = await producer.createTasks(stage1.id, stage1.type, [createTaskData()]);
 
     const stage2 = await producer.createStage(job.id, createStageData());
-    const [task2] = await producer.createTasks(stage2.id, stage2.type, [createTaskData()]);
+    await producer.createTasks(stage2.id, stage2.type, [createTaskData()]);
 
     const stage3 = await producer.createStage(job.id, createStageData());
-    const [task3] = await producer.createTasks(stage3.id, stage3.type, [createTaskData()]);
+    await producer.createTasks(stage3.id, stage3.type, [createTaskData()]);
     //#endregion
 
     //#region Verify initial states - only first stage should be PENDING
     const initialStage1 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage1.id } },
     });
+
     expect(initialStage1.data?.status).toBe('PENDING');
 
     const initialStage2 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage2.id } },
     });
+
     expect(initialStage2.data?.status).toBe('CREATED');
 
     const initialStage3 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage3.id } },
     });
+
     expect(initialStage3.data?.status).toBe('CREATED');
     //#endregion
 
@@ -59,6 +62,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const completedStage1 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage1.id } },
     });
+
     expect(completedStage1.data?.status).toBe('COMPLETED');
     expect(completedStage1.data?.percentage).toBe(100);
     //#endregion
@@ -67,11 +71,13 @@ describe('Multiple Stages Workflow Tests', () => {
     const activatedStage2 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage2.id } },
     });
+
     expect(activatedStage2.data?.status).toBe('PENDING');
 
     const stillCreatedStage3 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage3.id } },
     });
+
     expect(stillCreatedStage3.data?.status).toBe('CREATED');
     //#endregion
 
@@ -79,6 +85,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const jobAfterStage1 = await api.GET('/v1/jobs/{jobId}', {
       params: { path: { jobId: job.id } },
     });
+
     expect(jobAfterStage1.data?.status).toBe('IN_PROGRESS');
     expect(jobAfterStage1.data?.percentage).toBeGreaterThan(0);
     expect(jobAfterStage1.data?.percentage).toBeLessThan(100);
@@ -92,6 +99,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const completedStage2 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage2.id } },
     });
+
     expect(completedStage2.data?.status).toBe('COMPLETED');
     //#endregion
 
@@ -99,6 +107,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const activatedStage3 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage3.id } },
     });
+
     expect(activatedStage3.data?.status).toBe('PENDING');
     //#endregion
 
@@ -106,7 +115,8 @@ describe('Multiple Stages Workflow Tests', () => {
     const jobAfterStage2 = await api.GET('/v1/jobs/{jobId}', {
       params: { path: { jobId: job.id } },
     });
-    expect(jobAfterStage2.data?.percentage).toBeGreaterThan(jobAfterStage1.data!.percentage!);
+
+    expect(jobAfterStage2.data?.percentage).toBeGreaterThan(jobAfterStage1.data!.percentage);
     expect(jobAfterStage2.data?.percentage).toBeLessThan(100);
     //#endregion
 
@@ -117,6 +127,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const completedStage3 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage3.id } },
     });
+
     expect(completedStage3.data?.status).toBe('COMPLETED');
     //#endregion
 
@@ -124,6 +135,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const completedJob = await api.GET('/v1/jobs/{jobId}', {
       params: { path: { jobId: job.id } },
     });
+
     expect(completedJob.data?.status).toBe('COMPLETED');
     expect(completedJob.data?.percentage).toBe(100);
     //#endregion
@@ -150,7 +162,9 @@ describe('Multiple Stages Workflow Tests', () => {
       // Complete both tasks for each stage
       for (let i = 0; i < 2; i++) {
         const task = await consumer.dequeueTask(stage.type);
+
         expect(task).not.toBeNull();
+
         await consumer.markTaskCompleted(task!.id);
       }
 
@@ -158,6 +172,7 @@ describe('Multiple Stages Workflow Tests', () => {
       const stageStatus = await api.GET('/v1/stages/{stageId}', {
         params: { path: { stageId: stage.id } },
       });
+
       expect(stageStatus.data?.status).toBe('COMPLETED');
     }
     //#endregion
@@ -168,6 +183,7 @@ describe('Multiple Stages Workflow Tests', () => {
     });
 
     expect(allStages.data).toHaveLength(5);
+
     allStages.data!.forEach((stage, index) => {
       expect(stage.order).toBe(index + 1);
       expect(stage.status).toBe('COMPLETED');
@@ -178,6 +194,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const completedJob = await api.GET('/v1/jobs/{jobId}', {
       params: { path: { jobId: job.id } },
     });
+
     expect(completedJob.data?.status).toBe('COMPLETED');
     expect(completedJob.data?.percentage).toBe(100);
     //#endregion
@@ -211,7 +228,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const initial = await api.GET('/v1/jobs/{jobId}', {
       params: { path: { jobId: job.id } },
     });
-    percentages.push(initial.data!.percentage!);
+    percentages.push(initial.data!.percentage);
 
     // Complete each stage and track percentage
     for (const stage of [stage1, stage2, stage3, stage4]) {
@@ -222,7 +239,7 @@ describe('Multiple Stages Workflow Tests', () => {
       const jobStatus = await api.GET('/v1/jobs/{jobId}', {
         params: { path: { jobId: job.id } },
       });
-      percentages.push(jobStatus.data!.percentage!);
+      percentages.push(jobStatus.data!.percentage);
     }
     //#endregion
 
@@ -283,6 +300,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const failedJob = await api.GET('/v1/jobs/{jobId}', {
       params: { path: { jobId: job.id } },
     });
+
     expect(failedJob.data?.status).toBe('FAILED');
     //#endregion
 
@@ -290,12 +308,14 @@ describe('Multiple Stages Workflow Tests', () => {
     const unchangedStage3 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage3.id } },
     });
+
     // Stage 3 should still be CREATED or WAITING since it never became available
     expect(['CREATED', 'WAITING']).toContain(unchangedStage3.data!.status);
     //#endregion
 
     //#region Verify no more tasks can be dequeued from stage 3
     const noTask = await consumer.dequeueTask(stage3.type);
+
     expect(noTask).toBeNull();
     //#endregion
   });
@@ -327,6 +347,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const completedStage1 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage1.id } },
     });
+
     expect(completedStage1.data?.status).toBe('COMPLETED');
     //#endregion
 
@@ -334,11 +355,13 @@ describe('Multiple Stages Workflow Tests', () => {
     const waitingStage2 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage2.id } },
     });
+
     expect(waitingStage2.data?.status).toBe('WAITING');
     //#endregion
 
     //#region Verify cannot dequeue from waiting stage
     const noTask = await consumer.dequeueTask(stage2.type);
+
     expect(noTask).toBeNull();
     //#endregion
 
@@ -351,6 +374,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const pendingStage2 = await api.GET('/v1/stages/{stageId}', {
       params: { path: { stageId: stage2.id } },
     });
+
     expect(pendingStage2.data?.status).toBe('PENDING');
     //#endregion
 
@@ -358,6 +382,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const task2 = await consumer.dequeueTask(stage2.type);
 
     expect(task2).not.toBeNull();
+
     await consumer.markTaskCompleted(task2!.id);
     //#endregion
 
@@ -371,6 +396,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const completedJob = await api.GET('/v1/jobs/{jobId}', {
       params: { path: { jobId: job.id } },
     });
+
     expect(completedJob.data?.status).toBe('COMPLETED');
     //#endregion
   });
@@ -382,7 +408,7 @@ describe('Multiple Stages Workflow Tests', () => {
     const jobData = createJobData();
     const job = await producer.createJob(jobData);
 
-    const stages: Array<{ id: string; type: string; order: number }> = [];
+    const stages: { id: string; type: string; order: number }[] = [];
     for (let i = 0; i < 4; i++) {
       const stage = await producer.createStage(job.id, createStageData());
       stages.push(stage);

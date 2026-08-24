@@ -1,15 +1,13 @@
-import type { ApiClient, JobnikSDK } from '@map-colonies/jobnik-sdk';
+import type { JobnikSDK } from '@map-colonies/jobnik-sdk';
 import { beforeAll, afterAll, it, describe, expect } from 'vitest';
 import { createJobnikSDKInstance } from '../infrastructure/sdk';
 import { createJobData, createStageData, createTaskData } from 'infrastructure/data';
 
 describe('Job Priority Test', () => {
   let jobnikSDK: JobnikSDK;
-  let api: ApiClient;
 
   beforeAll(() => {
     jobnikSDK = createJobnikSDKInstance();
-    api = jobnikSDK.getApiClient();
   });
 
   afterAll(() => {
@@ -28,6 +26,7 @@ describe('Job Priority Test', () => {
     const jobsWithTasks = await Promise.all(
       priorities.map(async (priority) => {
         const job = await producer.createJob({ ...createJobData(), priority });
+
         expect(job.priority).toBe(priority);
 
         const stage = await producer.createStage(job.id, { ...createStageData(), type: stageType });
@@ -44,10 +43,12 @@ describe('Job Priority Test', () => {
     for (const expectedPriority of expectedOrder) {
       const dequeuedTask = await consumer.dequeueTask(stageType);
       const expectedTask = jobsWithTasks.find((j) => j.priority === expectedPriority)!.task;
+
       expect(dequeuedTask!.id).toBe(expectedTask!.id);
     }
 
     const noTask = await consumer.dequeueTask(stageType);
+
     expect(noTask).toBeNull();
     //#endregion
   });

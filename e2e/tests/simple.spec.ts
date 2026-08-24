@@ -1,10 +1,10 @@
 import * as api from '@opentelemetry/api';
 import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
-import { ApiClient, JobnikSDK } from '@map-colonies/jobnik-sdk';
+import type { ApiClient, JobnikSDK } from '@map-colonies/jobnik-sdk';
 import { beforeAll, afterAll, it, describe, expect } from 'vitest';
-import { createJobnikSDKInstance } from '../infrastructure/sdk';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { propagation } from '@opentelemetry/api';
+import { createJobnikSDKInstance } from '../infrastructure/sdk';
 
 import { createJobData, createStageData, createTaskData } from 'infrastructure/data';
 
@@ -67,11 +67,13 @@ describe('simple test', () => {
     const firstStageSummary = await api.GET('/v1/stages/{stageId}/summary', {
       params: { path: { stageId: firstStage.id } },
     });
+
     expect(firstStageSummary.data).toMatchObject(expectedInitialSummary);
 
     const secondStageSummary = await api.GET('/v1/stages/{stageId}/summary', {
       params: { path: { stageId: secondStage.id } },
     });
+
     expect(secondStageSummary.data).toMatchObject(expectedInitialSummary);
 
     expect(secondStage.status).toBe('CREATED');

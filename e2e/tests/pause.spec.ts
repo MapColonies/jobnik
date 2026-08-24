@@ -1,10 +1,10 @@
 import * as api from '@opentelemetry/api';
 import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
-import { ApiClient, JobnikSDK } from '@map-colonies/jobnik-sdk';
+import type { ApiClient, JobnikSDK } from '@map-colonies/jobnik-sdk';
 import { beforeAll, afterAll, it, describe, expect } from 'vitest';
-import { createJobnikSDKInstance } from '../infrastructure/sdk';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { propagation } from '@opentelemetry/api';
+import { createJobnikSDKInstance } from '../infrastructure/sdk';
 
 import { createJobData, createStageData, createTaskData } from 'infrastructure/data';
 
@@ -55,6 +55,7 @@ describe('pause test', () => {
     //#endregion
 
     const dequeueResult = await consumer.dequeueTask(stage.type);
+
     expect(dequeueResult).toBeNull();
 
     //#region unpause job
@@ -65,6 +66,7 @@ describe('pause test', () => {
     //#endregion
     //#region dequeue task after unpause
     const dequeueResultAfterUnpause = await consumer.dequeueTask(stage.type);
+
     expect(dequeueResultAfterUnpause).not.toBeNull();
     //#endregion
   });

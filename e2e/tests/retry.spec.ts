@@ -85,6 +85,7 @@ describe('Task Retry Test', () => {
 
     //#region Verify no more tasks can be dequeued
     const noTask = await consumer.dequeueTask(stage.type);
+
     expect(noTask).toBeNull();
     //#endregion
   });
