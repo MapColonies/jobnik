@@ -25,16 +25,18 @@ Jobnik E2E is a comprehensive test suite for validating the Jobnik platform, a d
 
 ## Quick Start
 
-```bash
-# Clone the repository
-git clone https://github.com/MapColonies/jobnik-e2e.git
-cd jobnik-e2e
+This suite is a workspace in the [jobnik](https://github.com/MapColonies/jobnik) monorepo, not a standalone repository.
 
-# Install dependencies
-npm ci
+```bash
+# Clone the monorepo
+git clone https://github.com/MapColonies/jobnik.git
+cd jobnik
+
+# Install dependencies for every workspace
+pnpm install
 
 # Run tests (requires jobnik-manager running separately or via Docker)
-npm test
+pnpm --filter jobnik-e2e run e2e
 ```
 
 **For Docker setup**: the manager image is built from this monorepo's own checkout, so no other repository needs to be cloned. From the repository root:
@@ -51,21 +53,23 @@ docker compose -f e2e/docker-compose.yaml up -d --build
 
 ## Usage
 
+Run these from `e2e/`, or prefix with `pnpm --filter jobnik-e2e run` from the repository root.
+
 ```bash
 # Run all tests
-npm test
+pnpm run e2e
 
 # Watch mode (auto-rerun on changes)
-npm run test:watch
+pnpm run e2e:watch
 
 # Interactive UI
-npm run test:ui
+pnpm run e2e:ui
 
 # Run specific test
-npm test -- simple.spec.ts
+pnpm run e2e -- simple.spec.ts
 
 # Run tests matching pattern (by test name)
-npm test -- -t "retry"
+pnpm run e2e -- -t "retry"
 ```
 
 ## Docker Services
@@ -92,7 +96,7 @@ docker compose down
 docker compose down -v
 ```
 
-**Alternative**: You can also run the jobnik-manager server locally instead of using Docker. See the [jobnik-manager repository](https://github.com/MapColonies/jobnik-manager) for local development setup instructions.
+**Alternative**: You can also run the jobnik-manager server locally instead of using Docker. See [`apps/jobnik-manager`](../apps/jobnik-manager/README.md) for local development setup instructions.
 
 ### Turbo wiring
 
@@ -128,7 +132,7 @@ Database settings are managed via Docker Compose. See `docker-compose.yaml` for 
 ## Project Structure
 
 ```
-jobnik-e2e/
+e2e/
 ├── tests/              # E2E test specifications
 ├── infrastructure/     # Test utilities and SDK setup
 │   ├── sdk.ts         # Jobnik SDK initialization
@@ -206,8 +210,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/MapColonies/jobnik-e2e/issues)
-- **Repository**: [github.com/MapColonies/jobnik-e2e](https://github.com/MapColonies/jobnik-e2e)
+- **Issues**: [GitHub Issues](https://github.com/MapColonies/jobnik/issues)
+- **Repository**: [github.com/MapColonies/jobnik](https://github.com/MapColonies/jobnik)
 - **Team**: MapColonies Infrastructure Team
 
 ---
