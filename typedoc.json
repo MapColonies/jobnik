@@ -1,0 +1,7 @@
+{
+  "entryPoints": ["packages/jobnik-sdk"],
+  "entryPointStrategy": "packages",
+  "name": "Jobnik SDK",
+  "out": "docs/sdk",
+  "includeVersion": true
+}
