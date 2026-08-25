@@ -5,7 +5,13 @@
       "entry": ["src/instrumentation.mts"],
       "ignore": ["src/db/prisma/generated/**", "src/common/generated/**"],
       "ignoreUnresolved": ["./instrumentation.mjs"],
-      "ignoreDependencies": ["@map-colonies/prettier-config", "@types/express-serve-static-core", "@types/multer", "@types/swagger-ui-express"]
+      "ignoreDependencies": [
+        "@map-colonies/prettier-config",
+        "@types/express-serve-static-core",
+        "@types/multer",
+        "@types/swagger-ui-express",
+        "@prismaClient"
+      ]
     },
     "packages/jobnik-openapi": {
       "ignoreDependencies": ["@map-colonies/prettier-config"]
