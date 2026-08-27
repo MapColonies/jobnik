@@ -1,0 +1,2 @@
+#prevent git from changing line endings of sh file to /r/n on windows systems
+*.sh		text eol=lf
