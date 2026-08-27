@@ -5,7 +5,7 @@ services:
     image: postgres:15
     ports:
       - '${POSTGRES_PORT}:5432'
-    container_name: 'postgres-for-testing'
+    container_name: 'jobnik-manager-postgres'
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
