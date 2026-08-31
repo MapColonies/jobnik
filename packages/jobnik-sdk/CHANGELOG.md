@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.0](https://github.com/MapColonies/jobnik/compare/jobnik-sdk-v1.0.1...jobnik-sdk-v1.1.0) (2026-08-31)
+
+
+### 🎉 Features
+
+* **jobnik-manager:** gate pull requests on an unused-code report ([#13](https://github.com/MapColonies/jobnik/issues/13)) ([6334789](https://github.com/MapColonies/jobnik/commit/63347897ed50d87758a7c44e62c172d8d79fe19f))
+* **jobnik-openapi:** make the specification exist exactly once ([#6](https://github.com/MapColonies/jobnik/issues/6)) ([9e20b8e](https://github.com/MapColonies/jobnik/commit/9e20b8ec22897d57360cbc900459649149d19559))
+* **jobnik-sdk:** publish from its own tag with packaging and type validation ([#12](https://github.com/MapColonies/jobnik/issues/12)) ([b0261e8](https://github.com/MapColonies/jobnik/commit/b0261e851eb9591015cd5e2c0fc162392a29c7fe))
+
 ## [1.0.1](https://github.com/MapColonies/jobnik-sdk/compare/v1.0.0...v1.0.1) (2026-07-28)
 
 
