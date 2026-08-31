@@ -4,5 +4,5 @@
     "erasableSyntaxOnly": true,
     "lib": ["ESNext"]
   },
-  "include": ["openapi.mts", "copySpec.mts"]
+  "include": ["openapi.mts", "copySpec.mts", "checkPack.mts"]
 }
