@@ -289,6 +289,15 @@ importers:
       '@vitest/ui':
         specifier: ^3.2.4
         version: 3.2.7(vitest@3.2.7)
+      docker-compose:
+        specifier: ^1.3.0
+        version: 1.4.2
+      is-ci:
+        specifier: ^4.1.0
+        version: 4.1.0
+      jobnik-manager:
+        specifier: workspace:*
+        version: link:../apps/jobnik-manager
 
   packages/jobnik-openapi:
     devDependencies:

@@ -2,8 +2,12 @@ version: '3.8'
 
 services:
   manager:
+    image: jobnik-manager:e2e
     build:
-      context: ./jobnik-manager
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+      args:
+        APP_NAME: jobnik-manager
     ports:
       - '8080:8080'
     environment:
@@ -28,15 +32,19 @@ services:
 
   migrator:
     restart: 'no'
+    image: jobnik-manager:e2e
     build:
-      context: ./jobnik-manager
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+      args:
+        APP_NAME: jobnik-manager
     depends_on:
       db:
         condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/jobnik?schema=job_manager
-    entrypoint: ['npx']
-    command: ['prisma', 'migrate', 'deploy', '--schema', './db/prisma/schema.prisma']
+    entrypoint: ['prisma']
+    command: ['migrate', 'deploy', '--schema', './db/prisma/schema.prisma']
 
   db:
     image: postgres:14

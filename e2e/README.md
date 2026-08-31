@@ -37,10 +37,16 @@ npm ci
 npm test
 ```
 
-**For Docker setup**: Ensure the `jobnik-manager` repository is cloned alongside this repo, then run:
+**For Docker setup**: the manager image is built from this monorepo's own checkout, so no other repository needs to be cloned. From the repository root:
 
 ```bash
-docker compose up -d
+pnpm --filter jobnik-e2e run e2e
+```
+
+or, to manage the services directly:
+
+```bash
+docker compose -f e2e/docker-compose.yaml up -d --build
 ```
 
 ## Usage
@@ -64,7 +70,7 @@ npm test -- -t "retry"
 
 ## Docker Services
 
-The test suite uses Docker Compose to orchestrate services. **Note**: Docker setup requires the `jobnik-manager` repository to be cloned in the same directory.
+The test suite uses Docker Compose to orchestrate services. The `manager` and `migrator` services build the manager image from this repository's own checkout (`docker/backend.Dockerfile`), so no other repository needs to be cloned.
 
 **Services:**
 
@@ -87,6 +93,10 @@ docker compose down -v
 ```
 
 **Alternative**: You can also run the jobnik-manager server locally instead of using Docker. See the [jobnik-manager repository](https://github.com/MapColonies/jobnik-manager) for local development setup instructions.
+
+### Turbo wiring
+
+`package.json` lists `jobnik-manager` as a devDependency even though nothing here imports it. It's not dead weight: turbo derives which packages a change "affects" from the workspace dependency graph, and this suite's only real link to the manager is the Docker image built above, which turbo can't see. The unused dependency gives turbo that edge, so `turbo run e2e --affected` (and CI's e2e job) actually run when the manager changes.
 
 ## Test Suites
 

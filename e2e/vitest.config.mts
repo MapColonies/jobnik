@@ -10,6 +10,7 @@ export default defineConfig({
   test: {
     include: ['tests/*.spec.ts'],
     environment: 'node',
+    globalSetup: ['./infrastructure/globalSetup.ts'],
 
     reporters,
   },

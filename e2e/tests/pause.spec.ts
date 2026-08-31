@@ -49,11 +49,9 @@ describe('pause test', () => {
     });
 
     const taskSampleData = createTaskData();
-    const task = await producer.createTasks(stage.id, stage.type, [taskSampleData]);
-    await api.PUT('/v1/tasks/{taskId}/status', {
-      body: { status: 'PENDING' },
-      params: { path: { taskId: task[0]!.id } },
-    });
+    // Tasks are created PENDING already; the status endpoint only accepts COMPLETED/FAILED, so
+    // there is no user-facing way to set PENDING here (and none is needed).
+    await producer.createTasks(stage.id, stage.type, [taskSampleData]);
     //#endregion
 
     const dequeueResult = await consumer.dequeueTask(stage.type);

@@ -59,6 +59,22 @@ jobs:
         with:
           working-directory: apps/jobnik-manager
 
+  e2e:
+    name: Run E2E Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: 'blob:none'
+
+      - name: Init nodejs
+        uses: ./.github/actions/init-pnpm
+
+      - name: Run e2e suite
+        run: pnpm exec turbo run e2e --affected
+
   helm-lint:
     name: Run Helm lint Check
     runs-on: ubuntu-latest

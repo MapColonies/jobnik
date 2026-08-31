@@ -43,8 +43,11 @@ WORKDIR /prod-app
 
 COPY --chown=node:node --from=builder /prod-app .
 
-# to include prisma cli installation
-RUN npx prisma@6 format --check --schema ./dist/db/prisma/schema.prisma
+# npx's find-or-install can false-positive on the pnpm-deployed tree's partial
+# .pnpm/prisma@* store entry: it decides prisma is already present and skips
+# installing it, but never links a runnable bin, so the CLI 404s at exec time.
+# Install it explicitly instead.
+RUN npm install --global prisma@6 && prisma format --check --schema ./dist/db/prisma/schema.prisma
 
 USER node
 WORKDIR /prod-app/dist
