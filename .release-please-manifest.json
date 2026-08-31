@@ -1,0 +1,6 @@
+{
+  ".": "0.2.1",
+  "apps/jobnik-manager": "0.2.1",
+  "packages/jobnik-openapi": "0.2.1",
+  "packages/jobnik-sdk": "1.0.1"
+}
