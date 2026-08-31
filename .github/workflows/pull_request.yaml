@@ -1,0 +1,78 @@
+name: pull_request
+
+on: [pull_request, workflow_dispatch]
+
+env:
+  TURBO_SCM_BASE: origin/${{ github.base_ref }}
+
+jobs:
+  checks:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - task: lint
+            name: Lint
+          - task: format
+            name: Format
+          - task: type-check
+            name: Type-check
+          - task: lint:openapi
+            name: Specification lint
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: 'blob:none'
+
+      - name: Init nodejs
+        uses: ./.github/actions/init-pnpm
+
+      - name: Run ${{ matrix.name }}
+        run: pnpm exec turbo run ${{ matrix.task }} --affected
+
+  tests:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: 'blob:none'
+
+      - name: Init nodejs
+        uses: ./.github/actions/init-pnpm
+
+      - name: Run unit and integration tests
+        run: pnpm exec turbo run test --affected
+
+      - name: Report Coverage
+        # Only the manager configures coverage reporting today; skip when it didn't run.
+        if: always() && hashFiles('apps/jobnik-manager/coverage/coverage-summary.json') != ''
+        uses: davelosert/vitest-coverage-report-action@v2
+        with:
+          working-directory: apps/jobnik-manager
+
+  helm-lint:
+    name: Run Helm lint Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Known upstream issue: helm-lint-v1's own `changed` output is wired to a step
+      # id that doesn't exist (`list-changed` vs the step's actual `list_changed`),
+      # so its if-gated ct-lint/kind/ct-install steps never run. This job currently
+      # verifies only that the chart's dependencies resolve, not that it lints clean.
+      # Carried over as-is from the manager's own former workflow; worth reporting
+      # upstream to MapColonies/shared-workflows separately.
+      - name: Helm Lint Checks
+        uses: MapColonies/shared-workflows/actions/helm-lint@helm-lint-v1
+        with:
+          chartDirs: apps/jobnik-manager
