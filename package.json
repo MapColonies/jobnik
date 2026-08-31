@@ -34,10 +34,10 @@
     "@map-colonies/commitlint-config": "^2.0.1",
     "@map-colonies/prettier-config": "^1.0.0",
     "husky": "^9.1.7",
-    "knip": "^6.32.2",
+    "knip": "^6.32.3",
     "prettier": "^3.9.6",
     "pretty-quick": "^4.2.2",
-    "turbo": "^2.10.11",
+    "turbo": "^2.10.12",
     "typedoc": "^0.28.20",
     "typescript": "^5.9.3"
   },
