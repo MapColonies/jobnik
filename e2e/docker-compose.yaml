@@ -43,8 +43,8 @@ services:
         condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/jobnik?schema=job_manager
-    entrypoint: ['npx']
-    command: ['prisma@6', 'migrate', 'deploy', '--schema', './db/prisma/schema.prisma']
+    entrypoint: ['prisma']
+    command: ['migrate', 'deploy', '--schema', './db/prisma/schema.prisma']
 
   db:
     image: postgres:14
