@@ -17,14 +17,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MapColonies/jobnik-e2e.git"
+    "url": "git+https://github.com/MapColonies/jobnik.git",
+    "directory": "e2e"
   },
   "author": "infra-team",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/MapColonies/jobnik-e2e/issues"
+    "url": "https://github.com/MapColonies/jobnik/issues"
   },
-  "homepage": "https://github.com/MapColonies/jobnik-e2e#readme",
+  "homepage": "https://github.com/MapColonies/jobnik/tree/master/e2e#readme",
   "dependencies": {
     "@map-colonies/jobnik-sdk": "workspace:*",
     "@map-colonies/tsconfig": "^1.0.1",

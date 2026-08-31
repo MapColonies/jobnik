@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://json.schemastore.org/dependabot-2.0.json
+#
+# One configuration covers every workspace: `directories` globs match the root and every
+# app, package and the e2e suite, so a new workspace is picked up automatically and
+# upgrades arrive as a single stream of pull requests instead of one per former repository.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories:
+      - '/'
+      - '/apps/*'
+      - '/packages/*'
+      - '/e2e'
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'deps(deps)'
+      prefix-development: 'devdeps(deps)'
+    groups:
+      map-colonies:
+        patterns:
+          - '@map-colonies/*'
+      opentelemetry:
+        patterns:
+          - '@opentelemetry/*'
+      types:
+        patterns:
+          - '@types/*'
+      patch:
+        dependency-type: production
+        update-types:
+          - patch
+      dev-patch:
+        dependency-type: development
+        update-types:
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'ci(deps)'
