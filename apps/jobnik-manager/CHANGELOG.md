@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0](https://github.com/MapColonies/jobnik/compare/jobnik-manager-v0.2.1...jobnik-manager-v0.3.0) (2026-08-31)
+
+
+### 🎉 Features
+
+* **jobnik-manager:** gate pull requests on an unused-code report ([#13](https://github.com/MapColonies/jobnik/issues/13)) ([6334789](https://github.com/MapColonies/jobnik/commit/63347897ed50d87758a7c44e62c172d8d79fe19f))
+* **jobnik-openapi:** make the specification exist exactly once ([#6](https://github.com/MapColonies/jobnik/issues/6)) ([9e20b8e](https://github.com/MapColonies/jobnik/commit/9e20b8ec22897d57360cbc900459649149d19559))
+* publish the helm chart under the product name ([#9](https://github.com/MapColonies/jobnik/issues/9)) ([662e23d](https://github.com/MapColonies/jobnik/commit/662e23d72366ef488d9b5f768f5b497dd8cbf4d9))
+
 ## [0.2.1](https://github.com/MapColonies/jobnik-manager/compare/v0.2.0...v0.2.1) (2026-06-01)
 
 
