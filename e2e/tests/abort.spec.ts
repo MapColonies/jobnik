@@ -66,6 +66,7 @@ describe('Job Abortion Test', () => {
 
     //#region Verify second stage is aborted - can't dequeue tasks from aborted jobs
     const dequeueSecondTaskResponse = await consumer.dequeueTask(stage.type);
+
     expect(dequeueSecondTaskResponse).toBeNull();
     //#endregion
   });

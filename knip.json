@@ -22,7 +22,7 @@
       "ignoreDependencies": ["@map-colonies/prettier-config"]
     },
     "e2e": {
-      "ignoreDependencies": ["jobnik-manager"]
+      "ignoreDependencies": ["jobnik-manager", "@map-colonies/prettier-config"]
     }
   }
 }

@@ -1,20 +1,22 @@
 import type { NewJob, NewStage, NewTask } from '@map-colonies/jobnik-sdk';
 import { faker } from '@faker-js/faker';
-import { Priorities } from './constants';
+import { PRIORITIES } from './constants';
+
+const RANDOM_SUFFIX_LENGTH = 6;
 
 function createJobData(overrides?: Partial<NewJob<string>>): NewJob<string> {
   return {
-    name: `${faker.word.noun()}-${Date.now()}-${faker.string.alphanumeric(6)}`,
-    priority: faker.helpers.arrayElement(Priorities),
+    name: `${faker.word.noun()}-${Date.now()}-${faker.string.alphanumeric(RANDOM_SUFFIX_LENGTH)}`,
+    priority: faker.helpers.arrayElement(PRIORITIES),
     data: faker.airline.airline() as unknown as Record<string, unknown>,
     userMetadata: faker.science.chemicalElement() as unknown as Record<string, unknown>,
     ...overrides,
   };
 }
 
-function createStageData(overrides?: Partial<NewStage<string>>): NewStage<string> {
+function createStageData(overrides?: Partial<NewStage>): NewStage {
   return {
-    type: `${faker.word.noun()}-${Date.now()}-${faker.string.alphanumeric(6)}`,
+    type: `${faker.word.noun()}-${Date.now()}-${faker.string.alphanumeric(RANDOM_SUFFIX_LENGTH)}`,
     data: faker.airline.airline() as unknown as Record<string, unknown>,
     userMetadata: faker.science.chemicalElement() as unknown as Record<string, unknown>,
     ...overrides,

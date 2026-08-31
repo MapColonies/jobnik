@@ -1,11 +1,11 @@
 import * as api from '@opentelemetry/api';
 import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
-import { ApiClient, JobnikSDK } from '@map-colonies/jobnik-sdk';
+import type { JobnikSDK } from '@map-colonies/jobnik-sdk';
 import { beforeAll, afterAll, it, describe, expect } from 'vitest';
-import { createJobnikSDKInstance } from '../infrastructure/sdk';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { propagation } from '@opentelemetry/api';
 import { faker } from '@faker-js/faker';
+import { createJobnikSDKInstance } from '../infrastructure/sdk';
 
 import { createJobData, createStageData, createTaskData } from 'infrastructure/data';
 
@@ -16,12 +16,10 @@ propagation.setGlobalPropagator(new W3CTraceContextPropagator());
 
 describe('shared stage types test', () => {
   let jobnikSDK: JobnikSDK;
-  let api: ApiClient;
   const sharedStageType = faker.lorem.word();
 
   beforeAll(() => {
     jobnikSDK = createJobnikSDKInstance();
-    api = jobnikSDK.getApiClient();
   });
 
   afterAll(() => {
