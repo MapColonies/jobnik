@@ -93,4 +93,4 @@ jobs:
       - name: Helm Lint Checks
         uses: MapColonies/shared-workflows/actions/helm-lint@helm-lint-v1
         with:
-          chartDirs: apps/jobnik-manager
+          chartDirs: apps/jobnik-manager,helm

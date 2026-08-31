@@ -1,0 +1,6 @@
+# Defaults for the umbrella's subcharts, nested under each dependency's name.
+# The subchart's own values.yaml already supplies everything else; only the
+# condition flag needs a home here so it is discoverable without reading the
+# subchart's Chart.yaml.
+jobnik-manager:
+  enabled: true
