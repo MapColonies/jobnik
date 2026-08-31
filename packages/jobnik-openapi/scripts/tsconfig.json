@@ -2,7 +2,8 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "erasableSyntaxOnly": true,
-    "lib": ["ESNext"]
+    "lib": ["ESNext"],
+    "types": ["node"]
   },
-  "include": ["openapi.mts", "copySpec.mts"]
+  "include": ["."]
 }

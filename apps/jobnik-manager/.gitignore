@@ -118,7 +118,6 @@ src/db/prisma/generated/*
 !src/db/prisma/generated/client/
 src/db/prisma/generated/client/*
 !src/db/prisma/generated/client/sql/
-scripts/generateVersionedOpenApi.mjs
 
 # local values
 local-*.json

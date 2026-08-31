@@ -6,7 +6,6 @@
       "@src/*": ["src/*"],
       "@tests/*": ["tests/*"],
       "@common/*": ["src/common/*"],
-      "@openapi": ["src/openapi"],
       "@prismaClient": ["src/db/prisma/generated/client"]
     }
   },

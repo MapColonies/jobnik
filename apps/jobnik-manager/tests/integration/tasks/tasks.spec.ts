@@ -11,7 +11,7 @@ import {
   type RequestSender,
 } from '@map-colonies/openapi-helpers/requestSender';
 import { faker } from '@faker-js/faker';
-import type { paths, operations } from '@openapi';
+import { openapiFilePath, type paths, type operations } from 'jobnik-openapi';
 import { JobOperationStatus, Priority, Prisma, StageOperationStatus, TaskOperationStatus, type PrismaClient } from '@prismaClient';
 import type { PrismaTransaction } from '@src/db/types';
 import { getApp } from '@src/app';
@@ -60,7 +60,7 @@ describe('task', function () {
       useChild: true,
     });
 
-    requestSender = await createRequestSender<paths, operations>('openapi3.yaml', app);
+    requestSender = await createRequestSender<paths, operations>(openapiFilePath, app);
     prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
     await truncateAllTables(prisma);
 

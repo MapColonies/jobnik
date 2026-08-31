@@ -15,14 +15,12 @@ export type paths = {
      * Retrieve jobs matching criteria
      * @description Filter jobs by name, date range, priority. Optional stage inclusion.
      *     Returns empty array if no matches.
-     *
      */
     get: operations['findJobsV1'];
     put?: never;
     /**
      * Create job
      * @description Create job with config and metadata. Initial status: PENDING.
-     *
      */
     post: operations['createJobV1'];
     delete?: never;
@@ -48,7 +46,6 @@ export type paths = {
      *
      *     Optional inclusion of related stage data via the should_return_stages parameter,
      *     which allows clients to retrieve the complete job hierarchy in a single request.
-     *
      */
     get: operations['getJobByIdV1'];
     put?: never;
@@ -63,7 +60,6 @@ export type paths = {
      *     Attempting to delete a job in any other state will result in a 400 error.
      *
      *     Returns a success message with code JOB_DELETED_SUCCESSFULLY when completed.
-     *
      */
     delete: operations['deleteJobV1'];
     options?: never;
@@ -92,7 +88,6 @@ export type paths = {
      *
      *     User metadata is useful for storing application-specific context, tracking information,
      *     or any custom data needed by client applications.
-     *
      */
     patch: operations['updateUserMetadataV1'];
     trace?: never;
@@ -121,7 +116,6 @@ export type paths = {
      *     Higher priority jobs will be processed before lower priority ones when resources
      *     are constrained. Priority changes take effect immediately and apply to all
      *     pending tasks associated with the job.
-     *
      */
     patch: operations['updateJobPriorityV1'];
     trace?: never;
@@ -150,7 +144,6 @@ export type paths = {
      *     Status changes follow a state machine that enforces valid transitions. When a job's status
      *     is changed, the system will automatically update timestamps and completion percentages as
      *     appropriate.
-     *
      */
     put: operations['updateStatusV1'];
     post?: never;
@@ -181,7 +174,6 @@ export type paths = {
      *
      *     Optional inclusion of related task data via the should_return_tasks parameter,
      *     allowing clients to retrieve the complete job hierarchy in a single request.
-     *
      */
     get: operations['getStagesByJobIdV1'];
     put?: never;
@@ -212,7 +204,6 @@ export type paths = {
      *     The order field ensures stages are processed in the correct sequence when retrieved.
      *
      *     The job must exist and be in a valid state to accept new stages.
-     *
      */
     post: operations['addStageV1'];
     delete?: never;
@@ -235,7 +226,6 @@ export type paths = {
      *
      *     Optional inclusion of related task data via the should_return_tasks parameter
      *     allows clients to retrieve the complete stage hierarchy in a single request.
-     *
      */
     get: operations['getStagesV1'];
     put?: never;
@@ -263,7 +253,6 @@ export type paths = {
      *
      *     Optional inclusion of related task data via the should_return_tasks parameter,
      *     which allows clients to retrieve the complete stage hierarchy in a single request.
-     *
      */
     get: operations['getStageByIdV1'];
     put?: never;
@@ -289,7 +278,6 @@ export type paths = {
      *
      *     This endpoint is useful for displaying progress indicators or status dashboards
      *     without needing to retrieve and process all individual task details.
-     *
      */
     get: operations['getStageSummaryV1'];
     put?: never;
@@ -321,7 +309,6 @@ export type paths = {
      *
      *     User metadata is useful for storing application-specific context, tracking information,
      *     or any custom data needed by client applications.
-     *
      */
     patch: operations['updateStageUserMetadataV1'];
     trace?: never;
@@ -351,7 +338,6 @@ export type paths = {
      *     Status changes follow a state machine that enforces valid transitions. When a stage's
      *     status changes, it may automatically update the parent job's status and trigger
      *     transitions in subsequent stages (e.g., activating the next stage in the sequence).
-     *
      */
     put: operations['updateStageStatusV1'];
     post?: never;
@@ -375,7 +361,6 @@ export type paths = {
      * Retrieve all tasks for a specific stage
      * @description Fetches all tasks associated with the specified stage ID.
      *     Provides complete information about each task including type, status, and attempt count.
-     *
      */
     get: operations['getTasksByStageIdV1'];
     put?: never;
@@ -388,7 +373,6 @@ export type paths = {
      *     maximum attempt configuration. Tasks are created with an initial status of PENDING.
      *
      *     The stage must exist and be in a valid state to accept new tasks.
-     *
      */
     post: operations['addTasksV1'];
     delete?: never;
@@ -423,7 +407,6 @@ export type paths = {
      *     that are in valid states (PENDING or RETRIED), and updates related stage and job status if needed.
      *
      *     If successful, returns the complete task details with status updated to IN_PROGRESS.
-     *
      */
     patch: operations['dequeueTaskV1'];
     trace?: never;
@@ -457,7 +440,6 @@ export type paths = {
      *
      *     This endpoint is useful for monitoring task progress across multiple stages and jobs,
      *     enabling clients to build custom dashboards or track specific task types.
-     *
      */
     get: operations['getTasksByCriteriaV1'];
     put?: never;
@@ -482,7 +464,6 @@ export type paths = {
      * Retrieve a specific task by its ID
      * @description Fetches detailed information about a task using its unique identifier.
      *     Returns complete task data including type, status, payload, and attempt information.
-     *
      */
     get: operations['getTaskByIdV1'];
     put?: never;
@@ -514,7 +495,6 @@ export type paths = {
      *
      *     User metadata is useful for storing application-specific context, tracking information,
      *     or any custom data needed by client applications.
-     *
      */
     patch: operations['updateTaskUserMetadataV1'];
     trace?: never;
@@ -542,7 +522,6 @@ export type paths = {
      *     Status changes follow a state machine that enforces valid transitions. When a task's status
      *     is changed, the system will automatically update the parent stage's summary statistics and
      *     may affect the stage's overall status.
-     *
      */
     put: operations['updateTaskStatusV1'];
     post?: never;
@@ -608,7 +587,6 @@ export type components = {
     /**
      * @description Job priority for processing order. Higher priority processed first.
      *     VERY_HIGH > HIGH > MEDIUM > LOW > VERY_LOW
-     *
      * @example LOW
      * @enum {string}
      */
@@ -616,7 +594,6 @@ export type components = {
     /**
      * @description W3C traceparent for distributed tracing. Auto-injected if not provided.
      *     See [W3C Trace Context](https://www.w3.org/TR/trace-context/).
-     *
      * @example 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
      */
     traceparent: string;
@@ -634,7 +611,6 @@ export type components = {
     /**
      * @description User-controllable job statuses: PENDING (resume), ABORTED (cancel), PAUSED (suspend).
      *     System-managed: IN_PROGRESS, COMPLETED, FAILED, CREATED.
-     *
      * @example PENDING
      * @enum {string}
      */
@@ -642,7 +618,6 @@ export type components = {
     /**
      * @description All job states. User-controllable: PENDING, ABORTED, PAUSED. System-managed: IN_PROGRESS, COMPLETED, FAILED, CREATED.
      *     Terminal states: COMPLETED, FAILED, ABORTED.
-     *
      * @example PENDING
      * @enum {string}
      */
@@ -650,14 +625,12 @@ export type components = {
     /**
      * @description User-controllable stage status: PENDING only.
      *     System-managed: IN_PROGRESS, COMPLETED, FAILED, ABORTED, WAITING, CREATED.
-     *
      * @enum {string}
      */
     stageOperationStatus: 'PENDING';
     /**
      * @description All stage states. User-controllable: PENDING. System-managed: IN_PROGRESS, COMPLETED, FAILED, ABORTED, WAITING, CREATED.
      *     Terminal states: COMPLETED, FAILED, ABORTED.
-     *
      * @example PENDING
      * @enum {string}
      */
@@ -665,7 +638,6 @@ export type components = {
     /**
      * @description User-controllable task statuses: COMPLETED, FAILED.
      *     System-managed: PENDING, IN_PROGRESS, CREATED, RETRIED.
-     *
      * @example COMPLETED
      * @enum {string}
      */
@@ -673,7 +645,6 @@ export type components = {
     /**
      * @description All task states including RETRIED for retry handling.
      *     Terminal states: COMPLETED, FAILED.
-     *
      * @example PENDING
      * @enum {string}
      */
@@ -687,7 +658,6 @@ export type components = {
      * @description Free-form string identifier for stage functionality, allowing flexible categorization
      *     of stage operations. Used for routing tasks to appropriate workers and
      *     for filtering in API requests. Can be any descriptive name up to 50 characters.
-     *
      * @example unknown
      */
     stageType: string;
@@ -702,10 +672,11 @@ export type components = {
     userMetadata: {
       [key: string]: unknown;
     };
-    /** @description Aggregated task statistics grouped by operational status, providing a complete overview of stage progress.
+    /**
+     * @description Aggregated task statistics grouped by operational status, providing a complete overview of stage progress.
      *     Used for monitoring progress, generating dashboards, and determining when stages/jobs are complete.
      *     The total field should always equal the sum of all other status counts.
-     *      */
+     */
     summary: {
       /** @description Number of tasks awaiting execution */
       pending: number;
@@ -722,7 +693,8 @@ export type components = {
       /** @description Total count of tasks belonging to the stage */
       total: number;
     };
-    /** @description Input payload for creating a new job in the system.
+    /**
+     * @description Input payload for creating a new job in the system.
      *     Contains all required configuration for job execution, including processing mode,
      *     custom parameters, metadata.
      *
@@ -730,7 +702,7 @@ export type components = {
      *     - If traceparent is provided, user's trace context is used (tracestate defaults to null if not provided)
      *     - If traceparent is not provided, the system automatically injects both traceparent and tracestate
      *       from the active OpenTelemetry context using propagation.inject() (tracestate may still be null if not available)
-     *      */
+     */
     createJobPayload: {
       name: components['schemas']['jobName'];
       data: components['schemas']['jobPayload'];
@@ -739,7 +711,8 @@ export type components = {
       traceparent?: components['schemas']['traceparent'];
       tracestate?: components['schemas']['tracestate'];
     };
-    /** @description Complete job information with status and metadata.
+    /**
+     * @description Complete job information with status and metadata.
      *
      *     Comprehensive job response model containing all job details including configuration,
      *     execution status, progress tracking, and associated metadata. This schema represents
@@ -747,7 +720,7 @@ export type components = {
      *
      *     Includes optional stage data when requested via query parameters, allowing clients
      *     to retrieve the complete job hierarchy in a single request.
-     *      */
+     */
     job: {
       id: components['schemas']['jobId'];
       status: components['schemas']['jobOperationStatusResponse'];
@@ -768,19 +741,19 @@ export type components = {
        *     If true, the stage will not start processing immediately and will require
        *     manual intervention to begin execution. Useful for staging workflows where
        *     stages need to be prepared but not executed until all dependencies are met.
-       *
        * @example false
        */
       startAsWaiting?: boolean;
     };
-    /** @description Input payload for creating a new stage within a job.
+    /**
+     * @description Input payload for creating a new stage within a job.
      *     Contains stage type, operational parameters, and optional user metadata.
      *
      *     Tracing fields (traceparent, tracestate) are optional:
      *     - If traceparent is provided, user's trace context is used (tracestate defaults to null if not provided)
      *     - If traceparent is not provided, the system automatically injects both traceparent and tracestate
      *       from the active OpenTelemetry context using propagation.inject() (tracestate may still be null if not available)
-     *      */
+     */
     createStagePayload: {
       type: components['schemas']['stageType'];
       data: components['schemas']['stagePayload'];
@@ -806,14 +779,16 @@ export type components = {
      * @description Unique identifier for a task, generated by the system upon task creation
      */
     taskId: TaskId;
-    /** @description Custom task configuration data containing operation-specific parameters.
+    /**
+     * @description Custom task configuration data containing operation-specific parameters.
      *     The schema varies based on task type and contains all necessary information
      *     for task execution by workers.
-     *      */
+     */
     taskPayload: {
       [key: string]: unknown;
     };
-    /** @description Input payload for creating a new task within a stage.
+    /**
+     * @description Input payload for creating a new task within a stage.
      *     Contains task type, operational parameters, and optional retry configuration.
      *     Used when adding tasks to existing stages.
      *
@@ -821,7 +796,7 @@ export type components = {
      *     - If traceparent is provided, user's trace context is used (tracestate defaults to null if not provided)
      *     - If traceparent is not provided, the system automatically injects both traceparent and tracestate
      *       from the active OpenTelemetry context using propagation.inject() (tracestate may still be null if not available)
-     *      */
+     */
     createTaskPayload: {
       data: components['schemas']['taskPayload'];
       userMetadata?: components['schemas']['userMetadata'];
@@ -829,10 +804,11 @@ export type components = {
       traceparent?: components['schemas']['traceparent'];
       tracestate?: components['schemas']['tracestate'];
     };
-    /** @description Complete task information returned by the API, including all configuration
+    /**
+     * @description Complete task information returned by the API, including all configuration
      *     data along with execution status, attempt tracking, and associated stage reference.
      *     Used when retrieving task details or after task creation.
-     *      */
+     */
     taskResponse: {
       id: components['schemas']['taskId'];
       data: components['schemas']['taskPayload'];
@@ -848,16 +824,18 @@ export type components = {
       traceparent: components['schemas']['traceparent'];
       tracestate?: components['schemas']['tracestate'];
     };
-    /** @description Standard success response structure used for operations that don't
+    /**
+     * @description Standard success response structure used for operations that don't
      *     return entity data, providing a standardized confirmation message.
-     *      */
+     */
     defaultOkMessage: {
       code: components['schemas']['successMessages'];
     };
-    /** @description Foundation schema for standardized error responses across all API endpoints.
+    /**
+     * @description Foundation schema for standardized error responses across all API endpoints.
      *     Provides consistent structure with human-readable message and common-readable code fields
      *     that are extended by individual endpoints to define their specific error scenarios.
-     *      */
+     */
     baseErrorResponse: {
       /** @description Human-readable error message describing the issue */
       message: string;
@@ -936,9 +914,10 @@ export type components = {
     paramStageType: components['schemas']['stageType'];
     /** @description Stage type identifier for dequeuing tasks */
     stageType: components['schemas']['stageType'];
-    /** @description Filter results by stage operational status (e.g., PENDING, IN_PROGRESS).
+    /**
+     * @description Filter results by stage operational status (e.g., PENDING, IN_PROGRESS).
      *     Used to find stages in specific execution states.
-     *      */
+     */
     stageStatus: components['schemas']['stageOperationStatusResponse'];
     /** @description 1-based page number for pagination. Requesting beyond the last page returns an empty items array. */
     pageParam: number;
@@ -1117,9 +1096,11 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /** @example {
+          /**
+           * @example {
            *       "code": "JOB_DELETED_SUCCESSFULLY"
-           *     } */
+           *     }
+           */
           'application/json': components['schemas']['defaultOkMessage'];
         };
       };
@@ -1177,9 +1158,11 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /** @example {
+          /**
+           * @example {
            *       "code": "JOB_MODIFIED_SUCCESSFULLY"
-           *     } */
+           *     }
+           */
           'application/json': components['schemas']['defaultOkMessage'];
         };
       };
@@ -1236,9 +1219,11 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /** @example {
+          /**
+           * @example {
            *       "code": "JOB_MODIFIED_SUCCESSFULLY"
-           *     } */
+           *     }
+           */
           'application/json': components['schemas']['defaultOkMessage'];
         };
       };
@@ -1304,9 +1289,11 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /** @example {
+          /**
+           * @example {
            *       "code": "JOB_MODIFIED_SUCCESSFULLY"
-           *     } */
+           *     }
+           */
           'application/json': components['schemas']['defaultOkMessage'];
         };
       };
@@ -1459,9 +1446,10 @@ export interface operations {
         job_id?: components['parameters']['paramJobId'];
         /** @description Filter results by stage type (e.g., processing, validation) */
         stage_type?: components['parameters']['paramStageType'];
-        /** @description Filter results by stage operational status (e.g., PENDING, IN_PROGRESS).
+        /**
+         * @description Filter results by stage operational status (e.g., PENDING, IN_PROGRESS).
          *     Used to find stages in specific execution states.
-         *      */
+         */
         stage_operation_status?: components['parameters']['stageStatus'];
         /** @description When true, includes task data in the response */
         should_return_tasks?: components['parameters']['includeTasks'];
@@ -1630,9 +1618,11 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /** @example {
+          /**
+           * @example {
            *       "code": "STAGE_MODIFIED_SUCCESSFULLY"
-           *     } */
+           *     }
+           */
           'application/json': components['schemas']['defaultOkMessage'];
         };
       };
@@ -1689,9 +1679,11 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /** @example {
+          /**
+           * @example {
            *       "code": "STAGE_MODIFIED_SUCCESSFULLY"
-           *     } */
+           *     }
+           */
           'application/json': components['schemas']['defaultOkMessage'];
         };
       };
@@ -2040,9 +2032,11 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /** @example {
+          /**
+           * @example {
            *       "code": "TASK_MODIFIED_SUCCESSFULLY"
-           *     } */
+           *     }
+           */
           'application/json': components['schemas']['defaultOkMessage'];
         };
       };

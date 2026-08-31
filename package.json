@@ -18,6 +18,7 @@
     "format": "turbo run format",
     "format:fix": "turbo run format:fix",
     "type-check": "turbo run type-check",
+    "generate:check": "turbo run generate:check",
     "test": "turbo run test",
     "e2e": "turbo run e2e",
     "check-dist": "turbo run check-dist",
