@@ -1,0 +1,9 @@
+{
+  "extends": "@map-colonies/tsconfig/tsconfig-app",
+  "compilerOptions": {
+    "erasableSyntaxOnly": true,
+    "types": ["node"]
+  },
+  "include": ["."],
+  "exclude": ["node_modules", "dist"]
+}

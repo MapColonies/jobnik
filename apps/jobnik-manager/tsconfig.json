@@ -1,0 +1,15 @@
+{
+  "extends": "@map-colonies/tsconfig/tsconfig-app",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@src/*": ["src/*"],
+      "@tests/*": ["tests/*"],
+      "@common/*": ["src/common/*"],
+      "@openapi": ["src/openapi"],
+      "@prismaClient": ["src/db/prisma/generated/client"]
+    }
+  },
+  "include": ["src", "tests"],
+  "exclude": ["node_modules", "dist"]
+}

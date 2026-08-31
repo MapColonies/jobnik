@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  manager:
+    build:
+      context: ./jobnik-manager
+    ports:
+      - '8080:8080'
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=jobnik
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_SCHEMA=job_manager
+      - CONFIG_OFFLINE_MODE=true
+    depends_on:
+      db:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --no-verbose --spider http://localhost:8080/liveness || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migrator:
+    restart: 'no'
+    build:
+      context: ./jobnik-manager
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/jobnik?schema=job_manager
+    entrypoint: ['npx']
+    command: ['prisma', 'migrate', 'deploy', '--schema', './db/prisma/schema.prisma']
+
+  db:
+    image: postgres:14
+    ports:
+      - '5432:5432'
+    container_name: 'postgres-for-testing'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=jobnik
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c random_page_cost=1.0
+    # Disable features to improve performance in tests
+    tmpfs: /var/lib/postgresql/data

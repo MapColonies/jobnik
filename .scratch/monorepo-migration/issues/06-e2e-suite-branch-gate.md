@@ -10,6 +10,8 @@ The composition file stays inside the e2e workspace and must never move to the r
 
 **Blocked by:** 05 (build the manager image from a pruned workspace).
 
+**Note from ticket 02:** now that the SDK resolves through the workspace, `tsc --noEmit` on the e2e suite fails — `tests/pause.spec.ts` and `tests/wait.spec.ts` set task/stage status via the API using string literals (`"PENDING"`, `"WAITING"`) that the _current_ SDK's generated types no longer accept for those endpoints. This is exactly the staleness ticket 02 called out (the suite was pinned a major behind); ticket 02 deliberately left it unfixed rather than guess at the intended status transitions. Confirm the correct status values against the current OpenAPI contract and fix the fixtures here, before wiring `type-check`/`e2e` into the single entry point.
+
 **Branch:** `migration/06-e2e-gate`, layer 6 of 13, based on `migration/05-container-image`. Stack conventions: `../stack.md`.
 
 **Status:** ready-for-agent

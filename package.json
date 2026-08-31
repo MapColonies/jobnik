@@ -32,5 +32,19 @@
     "prettier": "^3.9.6",
     "pretty-quick": "^4.2.2",
     "turbo": "^2.10.11"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "@scarf/scarf",
+      "esbuild",
+      "prisma",
+      "protobufjs",
+      "unrs-resolver"
+    ],
+    "overrides": {
+      "undici": "7.19.1"
+    }
   }
 }

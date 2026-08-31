@@ -1,0 +1,5 @@
+{
+  "extends": "@map-colonies/tsconfig/tsconfig-library",
+  "include": ["src", "tests", "tests/utils/vite.d.ts"],
+  "exclude": ["dist", "node_modules"]
+}

@@ -1,0 +1,125 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "./generated/client"
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
+  previewFeatures = ["typedSql"]
+}
+
+generator json {
+  provider = "prisma-json-types-generator"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Job {
+  id           String             @id @default(uuid()) @db.Uuid
+  /// [JobData]
+  data         Json               @default("{}")
+  status       JobOperationStatus @default(CREATED)
+  /// [PersistenceSnapshot]
+  xstate       Json
+  percentage   Int                @default(0)
+  creationTime DateTime           @default(now()) @map("creation_time")
+  updateTime   DateTime           @updatedAt @map("update_time")
+  userMetadata Json               @default("{}") @map("user_metadata")
+  priority     Priority           @default(VERY_LOW)
+  name         String
+  stage        Stage[]
+  traceparent  String
+  tracestate   String?
+
+  @@map("job")
+}
+
+enum JobOperationStatus {
+  PENDING     @map("Pending")
+  IN_PROGRESS @map("In-Progress")
+  COMPLETED   @map("Completed")
+  FAILED      @map("Failed")
+  ABORTED     @map("Aborted")
+  CREATED     @map("Created")
+  PAUSED      @map("Paused")
+
+  @@map("job_operation_status_enum")
+}
+
+enum StageOperationStatus {
+  PENDING     @map("Pending")
+  IN_PROGRESS @map("In-Progress")
+  COMPLETED   @map("Completed")
+  FAILED      @map("Failed")
+  ABORTED     @map("Aborted")
+  WAITING     @map("Waiting")
+  CREATED     @map("Created")
+
+  @@map("stage_operation_status_enum")
+}
+
+enum Priority {
+  VERY_HIGH @map("Very-High")
+  HIGH      @map("High")
+  MEDIUM    @map("Medium")
+  LOW       @map("Low")
+  VERY_LOW  @map("Very-Low")
+
+  @@map("priority_enum")
+}
+
+model Stage {
+  id           String               @id @default(uuid()) @db.Uuid
+  /// [StageData]
+  data         Json                 @default("{}")
+  job          Job                  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobId        String               @map("job_id") @db.Uuid
+  order        Int                  @default(1)
+  percentage   Int                  @default(0)
+  /// [UserMetadata]
+  userMetadata Json                 @default("{}") @map("user_metadata")
+  /// [StageSummary]
+  summary      Json
+  status       StageOperationStatus @default(CREATED)
+  /// [PersistenceSnapshot]
+  xstate       Json
+  type         String               @default("unknown") @db.VarChar(50)
+  task         Task[]
+  traceparent  String
+  tracestate   String?
+
+  @@map("stage")
+}
+
+model Task {
+  id           String              @id @default(uuid()) @db.Uuid
+  /// [TaskData]
+  data         Json                @default("{}")
+  status       TaskOperationStatus @default(CREATED)
+  /// [PersistenceSnapshot]
+  xstate       Json
+  creationTime DateTime            @default(now()) @map("creation_time")
+  updateTime   DateTime            @updatedAt @map("update_time")
+  startTime    DateTime?           @map("start_time")
+  endTime      DateTime?           @map("end_time")
+  userMetadata Json                @default("{}") @map("user_metadata")
+  stage        Stage               @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  stageId      String              @map("stage_id") @db.Uuid
+  attempts     Int                 @default(0)
+  maxAttempts  Int                 @default(1) @map("max_attempts")
+  traceparent  String
+  tracestate   String?
+
+  @@map("task")
+}
+
+enum TaskOperationStatus {
+  PENDING     @map("Pending")
+  IN_PROGRESS @map("In-Progress")
+  COMPLETED   @map("Completed")
+  FAILED      @map("Failed")
+  CREATED     @map("Created")
+  RETRIED     @map("Retried")
+
+  @@map("task_operation_status_enum")
+}

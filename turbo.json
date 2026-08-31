@@ -5,18 +5,19 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"],
+      "inputs": ["$TURBO_DEFAULT$", "src/db/prisma/schema.prisma"],
+      "outputs": ["dist/**", "src/db/prisma/generated/**"],
       "outputLogs": "errors-only"
     },
     "build:docker": {
       "cache": false
     },
     "lint": {
-      "dependsOn": [],
+      "dependsOn": ["^build", "build"],
       "outputLogs": "errors-only"
     },
     "lint:fix": {
-      "dependsOn": [],
+      "dependsOn": ["^build", "build"],
       "outputLogs": "errors-only"
     },
     "lint:openapi": {
@@ -32,15 +33,15 @@
       "outputLogs": "errors-only"
     },
     "type-check": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "build"],
       "outputLogs": "errors-only"
     },
     "test": {
-      "dependsOn": [],
+      "dependsOn": ["^build", "build"],
       "outputLogs": "errors-only"
     },
     "e2e": {
-      "dependsOn": [],
+      "dependsOn": ["^build"],
       "cache": false
     },
     "check-dist": {
