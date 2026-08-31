@@ -25,6 +25,8 @@ jobs:
             name: Specification drift
           - task: check-pack
             name: Packaging and type resolution
+          - task: //#knip
+            name: Unused code report
     steps:
       - name: Check out repository
         uses: actions/checkout@v6

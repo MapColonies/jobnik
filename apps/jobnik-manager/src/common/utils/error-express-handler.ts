@@ -10,7 +10,7 @@ import { StatusCodes, getReasonPhrase } from 'http-status-codes';
  * @property {StatusCodes} [statusCode] - The HTTP status code for the error response
  * @property {StatusCodes} [status] - Alternative property for HTTP status code
  */
-export interface HttpError extends Error {
+interface HttpError extends Error {
   statusCode?: StatusCodes;
   status?: StatusCodes;
   code?: string;
@@ -20,7 +20,7 @@ export interface HttpError extends Error {
  * Represents the structure of the error returned by the middleware.
  * stacktrace is only included in the response in development mode.
  */
-export interface ErrorResponse {
+interface ErrorResponse {
   message: string;
   stacktrace?: string;
   code: string;

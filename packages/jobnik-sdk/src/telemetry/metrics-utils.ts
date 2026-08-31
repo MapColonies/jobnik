@@ -83,15 +83,3 @@ export function categorizeError(error: unknown): 'timeout' | 'handler_error' | '
   // Default to handler error (application code failure)
   return 'handler_error';
 }
-
-/**
- * Categorizes retry reasons for HTTP client metrics.
- */
-export function categorizeRetryReason(error: unknown): 'status_code' | 'timeout' | 'network_error' {
-  if (error instanceof Error) {
-    const message = error.message.toLowerCase();
-    if (message.includes('timeout')) return 'timeout';
-    if (message.includes('network') || message.includes('fetch') || message.includes('econnreset')) return 'network_error';
-  }
-  return 'status_code';
-}

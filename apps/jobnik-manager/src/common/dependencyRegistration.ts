@@ -3,7 +3,7 @@ import { container as defaultContainer } from 'tsyringe';
 
 type Constructor<T> = new (...args: unknown[]) => T;
 
-export type Providers<T> = ValueProvider<T> | FactoryProvider<T> | ClassProvider<T> | Constructor<T>;
+type Providers<T> = ValueProvider<T> | FactoryProvider<T> | ClassProvider<T> | Constructor<T>;
 
 export interface InjectionObject<T> {
   token: InjectionToken<T>;

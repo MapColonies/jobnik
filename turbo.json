@@ -56,6 +56,10 @@
     "check-dist": {
       "dependsOn": ["build"],
       "outputs": []
+    },
+    "//#knip": {
+      "dependsOn": [],
+      "outputLogs": "errors-only"
     }
   }
 }
