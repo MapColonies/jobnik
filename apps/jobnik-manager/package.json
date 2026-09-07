@@ -110,7 +110,7 @@
     "prisma-json-types-generator": "^3.6.2",
     "rimraf": "^6.1.2",
     "supertest": "^7.1.4",
-    "tsc-alias": "^1.8.11",
+    "tsc-alias": "^1.9.4",
     "type-fest": "^4.38.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.16",
