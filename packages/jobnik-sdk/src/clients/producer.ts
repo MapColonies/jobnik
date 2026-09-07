@@ -9,7 +9,7 @@ import type { InferTaskData, NewTask, Task } from '../types/task';
 import type { IProducer } from '../types/producer';
 import { DEFAULT_SPAN_CONTEXT, tracer, withSpan } from '../telemetry/trace';
 import { ATTR_MESSAGING_BATCH_MESSAGE_COUNT, ATTR_MESSAGING_DESTINATION_NAME, ATTR_MESSAGING_MESSAGE_CONVERSATION_ID } from '../telemetry/semconv';
-import { Logger } from '../types';
+import type { Logger } from '../types';
 import { createAPIErrorFromResponse } from '../errors/utils';
 import { JOBNIK_SDK_ERROR_CODES, ProducerError } from '../errors';
 import type { JobnikMetrics } from '../telemetry/metrics';

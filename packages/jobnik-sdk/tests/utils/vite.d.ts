@@ -1,6 +1,6 @@
 import type customMatchers from 'jest-extended';
 
-import { APIErrorCode } from '../../src/errors';
+import type { APIErrorCode } from '../../src/errors';
 
 interface MyCustomMatchers<R = unknown> {
   toHaveCauseCode: (expectedCode: APIErrorCode) => R;

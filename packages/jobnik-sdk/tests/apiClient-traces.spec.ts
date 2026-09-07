@@ -1,7 +1,8 @@
 import * as api from '@opentelemetry/api';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { MockAgent, MockPool } from 'undici';
+import type { MockPool } from 'undici';
+import { MockAgent } from 'undici';
 import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
 import { createApiClient } from '../src/api/index';
 

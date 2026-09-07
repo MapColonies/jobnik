@@ -1,6 +1,6 @@
-import { components } from './openapi';
-import { StageTypesTemplate } from './stage';
-import { Prettify } from './utils';
+import type { components } from './openapi';
+import type { StageTypesTemplate } from './stage';
+import type { Prettify } from './utils';
 
 type UserMetadata = components['schemas']['userMetadata'];
 type TaskPayload = components['schemas']['taskPayload'];

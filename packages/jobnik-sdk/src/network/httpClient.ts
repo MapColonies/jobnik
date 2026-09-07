@@ -1,4 +1,5 @@
-import { Agent, Dispatcher, RetryAgent } from 'undici';
+import type { Dispatcher } from 'undici';
+import { Agent, RetryAgent } from 'undici';
 import { StatusCodes } from 'http-status-codes';
 import { trace } from '@opentelemetry/api';
 import type { Logger } from '../telemetry/logger';

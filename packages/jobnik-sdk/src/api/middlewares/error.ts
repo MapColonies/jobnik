@@ -1,7 +1,7 @@
 import type { Middleware } from 'openapi-fetch';
 import statusCodes from 'http-status-codes';
 import { NetworkError, JOBNIK_SDK_ERROR_CODES, APIError } from '../../errors/sdkErrors';
-import { ErrorContext } from './common';
+import type { ErrorContext } from './common';
 
 function isObjectWithMessage(error: unknown): error is { message: string } {
   return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string';

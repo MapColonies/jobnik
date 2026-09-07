@@ -1,7 +1,7 @@
-import { Middleware } from 'openapi-fetch';
+import type { Middleware } from 'openapi-fetch';
 import statusCodes from 'http-status-codes';
 import { APIError, JOBNIK_SDK_ERROR_CODES } from '../../errors/sdkErrors';
-import { ErrorContext } from './common';
+import type { ErrorContext } from './common';
 
 /**
  * Handles HTTP response errors based on Job Manager Service API specification

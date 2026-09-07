@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-magic-numbers */
 // Optional import - gracefully handle missing prom-client
-import { Histogram, Counter, Gauge, Registry } from 'prom-client';
+import type { Registry } from 'prom-client';
+import { Histogram, Counter, Gauge } from 'prom-client';
 import { readPackageJsonSync } from '@map-colonies/read-pkg';
 
 export interface JobnikMetrics {

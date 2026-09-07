@@ -1,4 +1,5 @@
-import { API_ERROR_CODES, APIError, APIErrorCode } from './sdkErrors';
+import type { APIErrorCode } from './sdkErrors';
+import { API_ERROR_CODES, APIError } from './sdkErrors';
 
 export function createAPIErrorFromResponse(response: Response, apiError: { message: string; code: string }): APIError {
   const cause = {

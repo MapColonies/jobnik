@@ -1,5 +1,5 @@
 import tsBaseConfig, { namingConventions } from '@map-colonies/eslint-config/ts-base';
-import { config } from '@map-colonies/eslint-config/helpers';
+import { defineConfig } from '@map-colonies/eslint-config/helpers';
 
 const SemanticConventionsExtension = {
   selector: ['objectLiteralProperty', 'typeProperty'],
@@ -20,4 +20,4 @@ const customConfig = {
   },
 };
 
-export default config(tsBaseConfig, customConfig, { ignores: ['vitest.config.mts'] });
+export default defineConfig(tsBaseConfig, customConfig, { ignores: ['vitest.config.mts'] });

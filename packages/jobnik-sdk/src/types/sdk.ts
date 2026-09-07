@@ -1,9 +1,9 @@
-import { ApiClient } from '../api';
-import { IConsumer } from './consumer';
-import { JobData, JobTypesTemplate, ValidJobType } from './job';
-import { IProducer } from './producer';
-import { StageData, StageTypesTemplate, ValidStageType } from './stage';
-import { IWorker, TaskHandler, WorkerOptions } from './worker';
+import type { ApiClient } from '../api';
+import type { IConsumer } from './consumer';
+import type { JobData, JobTypesTemplate, ValidJobType } from './job';
+import type { IProducer } from './producer';
+import type { StageData, StageTypesTemplate, ValidStageType } from './stage';
+import type { IWorker, TaskHandler, WorkerOptions } from './worker';
 
 /**
  * Main interface for the Jobnik SDK providing access to job management clients.

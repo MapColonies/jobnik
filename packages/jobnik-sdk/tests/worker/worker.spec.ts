@@ -1,11 +1,11 @@
-import { setTimeout as sleep } from 'timers/promises';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, it, expect, afterEach, vi, beforeAll, afterAll, beforeEach, type MockedFunction } from 'vitest';
 import { propagation } from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { MockAgent, type MockPool } from 'undici';
 import createClient from 'openapi-fetch';
 import { Registry } from 'prom-client';
-import { createApiClient } from '../../src/api/index';
+import type { createApiClient } from '../../src/api/index';
 import { Worker } from '../../src/clients/worker';
 import { NoopLogger } from '../../src/telemetry/noopLogger';
 import type { StageId, TaskId } from '../../src/types/brands';

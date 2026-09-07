@@ -2,10 +2,11 @@
  * @fileoverview Tests for API client with focus on error handling middleware using undici MockAgent.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MockAgent, MockPool } from 'undici';
+import type { MockPool } from 'undici';
+import { MockAgent } from 'undici';
 import { createApiClient } from '../src/api/index';
 import { NetworkError, APIError } from '../src/errors/sdkErrors';
-import { JobId } from '../src/types/brands';
+import type { JobId } from '../src/types/brands';
 
 /* eslint-disable */
 // Add type declaration for global mockAgent
