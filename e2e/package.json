@@ -29,23 +29,23 @@
   "dependencies": {
     "@map-colonies/jobnik-sdk": "workspace:*",
     "@map-colonies/tsconfig": "^1.0.1",
-    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api": "catalog:",
     "@opentelemetry/context-async-hooks": "^2.1.0",
     "@opentelemetry/core": "^2.1.0",
     "@types/node": "^24.6.0",
-    "prom-client": "^15.1.3",
+    "prom-client": "catalog:",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.0.0",
     "@map-colonies/eslint-config": "^9.0.0",
-    "@map-colonies/prettier-config": "^1.0.0",
-    "@vitest/eslint-plugin": "^1.6.23",
+    "@map-colonies/prettier-config": "catalog:",
+    "@vitest/eslint-plugin": "catalog:",
     "@vitest/ui": "^3.2.4",
-    "docker-compose": "^1.3.0",
+    "docker-compose": "catalog:",
     "eslint": "^10.0.0",
-    "is-ci": "^4.1.0",
+    "is-ci": "catalog:",
     "jobnik-manager": "workspace:*",
     "prettier": "^3.9.5"
   }
