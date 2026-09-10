@@ -33,7 +33,6 @@
     "@opentelemetry/core": "catalog:",
     "@types/node": "catalog:",
     "prom-client": "catalog:",
-    "typescript": "^5.9.2",
     "vitest": "catalog:"
   },
   "devDependencies": {
@@ -47,7 +46,8 @@
     "eslint": "catalog:",
     "is-ci": "catalog:",
     "jobnik-manager": "workspace:*",
-    "prettier": "^3.9.5"
+    "prettier": "catalog:",
+    "typescript": "catalog:"
   },
   "engines": {
     "node": ">=24"
