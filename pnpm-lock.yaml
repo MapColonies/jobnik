@@ -18,9 +18,6 @@ catalogs:
     '@map-colonies/openapi-helpers':
       specifier: ^5.1.0
       version: 5.1.0
-    '@map-colonies/prettier-config':
-      specifier: ^1.0.0
-      version: 1.0.0
     '@map-colonies/read-pkg':
       specifier: ^2.0.0
       version: 2.0.0
@@ -231,9 +228,6 @@ importers:
       '@map-colonies/eslint-config':
         specifier: 'catalog:'
         version: 9.0.0(@typescript-eslint/utils@8.67.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(@vitest/eslint-plugin@1.6.27(@typescript-eslint/eslint-plugin@8.67.0(@typescript-eslint/parser@8.67.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3)(vitest@4.1.11))(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3)
-      '@map-colonies/prettier-config':
-        specifier: 'catalog:'
-        version: 1.0.0
       '@map-colonies/tsconfig':
         specifier: 'catalog:'
         version: 2.0.0
@@ -303,9 +297,6 @@ importers:
       jest-openapi:
         specifier: ^0.14.2
         version: 0.14.2
-      prettier:
-        specifier: 'catalog:'
-        version: 3.9.6
       prisma:
         specifier: ^6.19.0
         version: 6.19.3(typescript@5.9.3)
@@ -367,9 +358,6 @@ importers:
       '@map-colonies/eslint-config':
         specifier: 'catalog:'
         version: 9.0.0(@typescript-eslint/utils@8.67.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(@vitest/eslint-plugin@1.6.27(@typescript-eslint/eslint-plugin@8.67.0(@typescript-eslint/parser@8.67.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3)(vitest@4.1.11))(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3)
-      '@map-colonies/prettier-config':
-        specifier: 'catalog:'
-        version: 1.0.0
       '@map-colonies/tsconfig':
         specifier: 'catalog:'
         version: 2.0.0
@@ -391,9 +379,6 @@ importers:
       jobnik-manager:
         specifier: workspace:*
         version: link:../apps/jobnik-manager
-      prettier:
-        specifier: 'catalog:'
-        version: 3.9.6
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -406,9 +391,6 @@ importers:
       '@map-colonies/openapi-helpers':
         specifier: 'catalog:'
         version: 5.1.0(@types/express@4.17.25)(@types/json-schema@7.0.15)(openapi-typescript@7.13.0(typescript@5.9.3))(prettier@3.9.6)(supertest@7.2.2)(typescript@5.9.3)
-      '@map-colonies/prettier-config':
-        specifier: 'catalog:'
-        version: 1.0.0
       '@map-colonies/tsconfig':
         specifier: 'catalog:'
         version: 2.0.0
@@ -485,9 +467,6 @@ importers:
       '@map-colonies/openapi-helpers':
         specifier: 'catalog:'
         version: 5.1.0(@types/express@4.17.25)(@types/json-schema@7.0.15)(openapi-typescript@7.13.0(typescript@5.9.3))(prettier@3.9.6)(supertest@7.2.2)(typescript@5.9.3)
-      '@map-colonies/prettier-config':
-        specifier: 'catalog:'
-        version: 1.0.0
       '@map-colonies/tsconfig':
         specifier: 'catalog:'
         version: 2.0.0
@@ -524,9 +503,6 @@ importers:
       jobnik-openapi:
         specifier: workspace:*
         version: link:../jobnik-openapi
-      prettier:
-        specifier: 'catalog:'
-        version: 3.9.6
       prom-client:
         specifier: 'catalog:'
         version: 15.1.3

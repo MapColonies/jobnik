@@ -5,24 +5,15 @@
       "entry": ["src/instrumentation.mts"],
       "ignore": ["src/db/prisma/generated/**", "src/common/generated/**"],
       "ignoreUnresolved": ["./instrumentation.mjs"],
-      "ignoreDependencies": [
-        "@map-colonies/prettier-config",
-        "@types/express-serve-static-core",
-        "@types/multer",
-        "@types/swagger-ui-express",
-        "@prismaClient"
-      ]
+      "ignoreDependencies": ["@types/express-serve-static-core", "@types/multer", "@types/swagger-ui-express", "@prismaClient"]
     },
-    "packages/jobnik-openapi": {
-      "ignoreDependencies": ["@map-colonies/prettier-config"]
-    },
+    "packages/jobnik-openapi": {},
     "packages/jobnik-sdk": {
       "entry": ["tests/**/*.test-d.ts"],
-      "ignore": ["src/types/openapi.ts"],
-      "ignoreDependencies": ["@map-colonies/prettier-config"]
+      "ignore": ["src/types/openapi.ts"]
     },
     "e2e": {
-      "ignoreDependencies": ["jobnik-manager", "@map-colonies/prettier-config"]
+      "ignoreDependencies": ["jobnik-manager"]
     }
   }
 }
