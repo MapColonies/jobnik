@@ -29,3 +29,5 @@ catalog:
   '@map-colonies/js-logger': ^4.0.0
   '@opentelemetry/core': ^2.11.0
   '@opentelemetry/context-async-hooks': ^2.11.0
+  prettier: ^3.9.6
+  typescript: ^5.9.3

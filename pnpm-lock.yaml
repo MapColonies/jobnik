@@ -72,12 +72,18 @@ catalogs:
     openapi-types:
       specifier: ^12.1.3
       version: 12.1.3
+    prettier:
+      specifier: ^3.9.6
+      version: 3.9.6
     prom-client:
       specifier: ^15.1.3
       version: 15.1.3
     rimraf:
       specifier: ^6.1.3
       version: 6.1.3
+    typescript:
+      specifier: ^5.9.3
+      version: 5.9.3
     vitest:
       specifier: ^4.1.11
       version: 4.1.11
@@ -298,7 +304,7 @@ importers:
         specifier: ^0.14.2
         version: 0.14.2
       prettier:
-        specifier: ^3.9.5
+        specifier: 'catalog:'
         version: 3.9.6
       prisma:
         specifier: ^6.19.0
@@ -319,7 +325,7 @@ importers:
         specifier: ^4.38.0
         version: 4.41.0
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
@@ -351,9 +357,6 @@ importers:
       prom-client:
         specifier: 'catalog:'
         version: 15.1.3
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.3
       vitest:
         specifier: 'catalog:'
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))
@@ -389,8 +392,11 @@ importers:
         specifier: workspace:*
         version: link:../apps/jobnik-manager
       prettier:
-        specifier: ^3.9.5
+        specifier: 'catalog:'
         version: 3.9.6
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
 
   packages/jobnik-openapi:
     devDependencies:
@@ -425,13 +431,13 @@ importers:
         specifier: 'catalog:'
         version: 12.1.3
       prettier:
-        specifier: ^3.9.5
+        specifier: 'catalog:'
         version: 3.9.6
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
       yaml:
         specifier: ^2.8.2
@@ -519,7 +525,7 @@ importers:
         specifier: workspace:*
         version: link:../jobnik-openapi
       prettier:
-        specifier: ^3.5.3
+        specifier: 'catalog:'
         version: 3.9.6
       prom-client:
         specifier: 'catalog:'
@@ -531,7 +537,7 @@ importers:
         specifier: 'catalog:'
         version: 6.1.3
       typescript:
-        specifier: ^5.8.2
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
