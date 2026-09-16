@@ -7,8 +7,8 @@ import type { InferStageData, Stage, StageData, StageTypesTemplate, ValidStageTy
 import type { IProducer } from './producer';
 import type { InferJobData, Job, JobData, JobTypesTemplate, ValidJobType } from './job';
 import type { Prettify } from './utils';
-import { IJobnikSDK } from './sdk';
-import { BackoffOptions } from './backoff';
+import type { IJobnikSDK } from './sdk';
+import type { BackoffOptions } from './backoff';
 
 /**
  * Configuration options for circuit breaker behavior.

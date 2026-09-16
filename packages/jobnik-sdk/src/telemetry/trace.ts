@@ -1,7 +1,8 @@
 import { hostname } from 'node:os';
-import { Span, SpanOptions, SpanStatusCode, trace, SpanContext } from '@opentelemetry/api';
+import type { Span, SpanOptions, SpanContext } from '@opentelemetry/api';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { readPackageJsonSync } from '@map-colonies/read-pkg';
-import { Logger } from '../types';
+import type { Logger } from '../types';
 import { ATTR_MESSAGING_CLIENT_ID, ATTR_MESSAGING_SYSTEM } from './semconv';
 
 // Dynamically set from package.json

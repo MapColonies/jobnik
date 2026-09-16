@@ -3,7 +3,7 @@ import { Consumer } from '../../src/clients/consumer';
 import type { ApiClient } from '../../src/api';
 import type { Task } from '../../src/types/task';
 import { NoopLogger } from '../../src/telemetry/noopLogger';
-import { Metrics } from '../../src/telemetry/metrics';
+import type { Metrics } from '../../src/telemetry/metrics';
 
 // Dummy types for testing
 interface TestStageTypes {

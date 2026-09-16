@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Logger } from './logger';
+import type { Logger } from './logger';
 
 export class NoopLogger implements Logger {
   public debug(obj: object | string, ...args: any[]): void {

@@ -2,11 +2,11 @@ import { describe, it, expectTypeOf } from 'vitest';
 import { Worker } from '../../src/clients/worker';
 import type { ApiClient } from '../../src/api';
 import type { TaskId } from '../../src/types/brands';
-import { NoopLogger } from '../../src/telemetry/noopLogger';
+import type { NoopLogger } from '../../src/telemetry/noopLogger';
 import type { TaskHandler, WorkerOptions } from '../../src/types/worker';
-import { IProducer } from '../../src/types/producer';
-import { Metrics } from '../../src/telemetry/metrics';
-import { Logger } from '../../src';
+import type { IProducer } from '../../src/types/producer';
+import type { Metrics } from '../../src/telemetry/metrics';
+import type { Logger } from '../../src';
 
 interface TestJobTypes {
   'image-processing': {

@@ -1,6 +1,7 @@
 import createClient, { type Client } from 'openapi-fetch';
 import type { paths } from '../types';
-import { createRetryAgent, HttpClientOptions } from '../network/httpClient';
+import type { HttpClientOptions } from '../network/httpClient';
+import { createRetryAgent } from '../network/httpClient';
 import type { JobnikMetrics } from '../telemetry/metrics';
 import { wrapClient } from './wrapper';
 import { createErrorHandlingMiddleware } from './middlewares/error';

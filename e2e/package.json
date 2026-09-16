@@ -29,8 +29,8 @@
   "dependencies": {
     "@map-colonies/jobnik-sdk": "workspace:*",
     "@opentelemetry/api": "catalog:",
-    "@opentelemetry/context-async-hooks": "^2.1.0",
-    "@opentelemetry/core": "^2.1.0",
+    "@opentelemetry/context-async-hooks": "catalog:",
+    "@opentelemetry/core": "catalog:",
     "@types/node": "catalog:",
     "prom-client": "catalog:",
     "typescript": "^5.9.2",
@@ -38,13 +38,13 @@
   },
   "devDependencies": {
     "@faker-js/faker": "catalog:",
-    "@map-colonies/eslint-config": "^9.0.0",
+    "@map-colonies/eslint-config": "catalog:",
     "@map-colonies/prettier-config": "catalog:",
     "@map-colonies/tsconfig": "catalog:",
     "@vitest/eslint-plugin": "catalog:",
     "@vitest/ui": "catalog:",
     "docker-compose": "catalog:",
-    "eslint": "^10.0.0",
+    "eslint": "catalog:",
     "is-ci": "catalog:",
     "jobnik-manager": "workspace:*",
     "prettier": "^3.9.5"

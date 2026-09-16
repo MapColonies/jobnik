@@ -11,7 +11,7 @@ import type { IWorker, TaskHandler, WorkerOptions } from './types/worker';
 import type { IJobnikSDK } from './types/sdk';
 import type { IProducer } from './types/producer';
 import type { IConsumer } from './types/consumer';
-import { HttpClientOptions } from './network/httpClient';
+import type { HttpClientOptions } from './network/httpClient';
 import { NoopLogger } from './telemetry/noopLogger';
 
 /**

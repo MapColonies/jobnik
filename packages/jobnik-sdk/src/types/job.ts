@@ -1,5 +1,5 @@
-import { components } from './openapi';
-import { Prettify } from './utils';
+import type { components } from './openapi';
+import type { Prettify } from './utils';
 
 type UserMetadata = components['schemas']['userMetadata'];
 type JobPayload = components['schemas']['jobPayload'];
