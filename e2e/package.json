@@ -38,7 +38,6 @@
   "devDependencies": {
     "@faker-js/faker": "catalog:",
     "@map-colonies/eslint-config": "catalog:",
-    "@map-colonies/prettier-config": "catalog:",
     "@map-colonies/tsconfig": "catalog:",
     "@vitest/eslint-plugin": "catalog:",
     "@vitest/ui": "catalog:",
@@ -46,7 +45,6 @@
     "eslint": "catalog:",
     "is-ci": "catalog:",
     "jobnik-manager": "workspace:*",
-    "prettier": "catalog:",
     "typescript": "catalog:"
   },
   "engines": {
