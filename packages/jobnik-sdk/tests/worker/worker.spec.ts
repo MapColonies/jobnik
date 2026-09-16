@@ -8,7 +8,7 @@ import { Registry } from 'prom-client';
 import type { createApiClient } from '../../src/api/index';
 import { Worker } from '../../src/clients/worker';
 import { NoopLogger } from '../../src/telemetry/noopLogger';
-import type { StageId, TaskId } from '../../src/types/brands';
+import type { StageId, TaskId } from 'jobnik-openapi';
 import type { Task } from '../../src/types/task';
 import type { Logger } from '../../src/types';
 import type { TaskHandler, WorkerOptions } from '../../src/types/worker';

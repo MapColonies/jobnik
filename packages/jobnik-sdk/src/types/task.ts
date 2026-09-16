@@ -1,4 +1,4 @@
-import type { components } from './openapi';
+import type { components } from 'jobnik-openapi';
 import type { StageTypesTemplate } from './stage';
 import type { Prettify } from './utils';
 

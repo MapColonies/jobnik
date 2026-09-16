@@ -6,7 +6,7 @@ import type { MockPool } from 'undici';
 import { MockAgent } from 'undici';
 import { createApiClient } from '../src/api/index';
 import { NetworkError, APIError } from '../src/errors/sdkErrors';
-import type { JobId } from '../src/types/brands';
+import type { JobId } from 'jobnik-openapi';
 
 /* eslint-disable */
 // Add type declaration for global mockAgent

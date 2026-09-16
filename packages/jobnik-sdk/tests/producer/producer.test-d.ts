@@ -3,7 +3,7 @@ import { describe, it, expectTypeOf } from 'vitest';
 import { Registry } from 'prom-client';
 import { Producer } from '../../src/clients/producer';
 import type { ApiClient } from '../../src/api';
-import type { JobId, StageId, TaskId } from '../../src/types/brands';
+import type { JobId, StageId, TaskId } from 'jobnik-openapi';
 import type { NewJob, JobData } from '../../src/types/job';
 import type { NewStage, InferStageData, StageData } from '../../src/types/stage';
 import type { NewTask, InferTaskData } from '../../src/types/task';

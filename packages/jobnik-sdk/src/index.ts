@@ -1,6 +1,6 @@
 export type { ApiClient } from './api';
 export type { HttpClientOptions } from './network/httpClient';
-export type { JobId, StageId, TaskId } from './types/brands';
+export type { JobId, StageId, TaskId } from 'jobnik-openapi';
 export type { Logger } from './types';
 export type { Job, NewJob, JobData } from './types/job';
 export type { Stage, NewStage, StageData } from './types/stage';

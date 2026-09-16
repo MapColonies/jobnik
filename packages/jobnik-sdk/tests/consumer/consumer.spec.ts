@@ -6,7 +6,7 @@ import { Registry } from 'prom-client';
 import { createApiClient } from '../../src/api/index';
 import { Consumer } from '../../src/clients/consumer';
 import { NoopLogger } from '../../src/telemetry/noopLogger';
-import type { StageId, TaskId } from '../../src/types/brands';
+import type { StageId, TaskId } from 'jobnik-openapi';
 import { ConsumerError, API_ERROR_CODES } from '../../src/errors';
 import type { Task } from '../../src/types/task';
 import { Metrics } from '../../src/telemetry/metrics';

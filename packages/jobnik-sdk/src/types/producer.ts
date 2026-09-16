@@ -1,4 +1,4 @@
-import type { JobId, StageId } from './brands';
+import type { JobId, StageId } from 'jobnik-openapi';
 import type { Job, JobData, JobTypesTemplate, NewJob, ValidJobType } from './job';
 import type { InferStageData, NewStage, Stage, StageData, StageTypesTemplate, ValidStageType } from './stage';
 import type { InferTaskData, NewTask, Task } from './task';

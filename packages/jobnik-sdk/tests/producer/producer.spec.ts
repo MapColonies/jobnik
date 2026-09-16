@@ -7,7 +7,7 @@ import { Registry } from 'prom-client';
 import { createApiClient } from '../../src/api/index';
 import { Producer } from '../../src/clients/producer';
 import { NoopLogger } from '../../src/telemetry/noopLogger';
-import type { JobId, StageId } from '../../src/types/brands';
+import type { JobId, StageId } from 'jobnik-openapi';
 import { ProducerError, API_ERROR_CODES } from '../../src/errors';
 import { Metrics } from '../../src/telemetry/metrics';
 

@@ -13,7 +13,7 @@ import { BASE_ATTRIBUTES, tracer } from '../telemetry/trace';
 import type { IWorker, TaskHandler, TaskHandlerContext, WorkerOptions } from '../types/worker';
 import type { IProducer } from '../types/producer';
 import { WorkerError } from '../errors/sdkErrors';
-import type { JobId, StageId, TaskId } from '../types/brands';
+import type { JobId, StageId, TaskId } from 'jobnik-openapi';
 import { CIRCUIT_BREAKER_STATES, MILLISECOND_IN_SECOND } from '../common/constants';
 import type { JobnikMetrics } from '../telemetry/metrics';
 import { categorizeError } from '../telemetry/metrics-utils';
