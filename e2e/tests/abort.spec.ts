@@ -1,7 +1,7 @@
 import type { ApiClient, JobnikSDK } from '@map-colonies/jobnik-sdk';
 import { beforeAll, afterAll, it, describe, expect } from 'vitest';
 import { createJobnikSDKInstance } from '../infrastructure/sdk';
-import { createJobData, createStageData, createTaskData } from 'infrastructure/data';
+import { createJobData, createStageData, createTaskData } from '../infrastructure/data';
 
 describe('Job Abortion Test', () => {
   let jobnikSDK: JobnikSDK;

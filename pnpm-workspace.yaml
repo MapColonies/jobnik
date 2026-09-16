@@ -8,6 +8,9 @@ catalog:
   '@map-colonies/eslint-config': ^9.0.0
   '@map-colonies/tsconfig': ^2.0.0
   '@types/node': ^24.13.3
+  vitest: ^4.1.11
+  '@vitest/ui': ^4.1.11
+  '@faker-js/faker': ^10.6.0
   '@map-colonies/prettier-config': ^1.0.0
   '@map-colonies/openapi-helpers': ^5.1.0
   '@map-colonies/read-pkg': ^2.0.0

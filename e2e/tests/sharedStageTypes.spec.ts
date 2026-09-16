@@ -7,7 +7,7 @@ import { propagation } from '@opentelemetry/api';
 import { faker } from '@faker-js/faker';
 import { createJobnikSDKInstance } from '../infrastructure/sdk';
 
-import { createJobData, createStageData, createTaskData } from 'infrastructure/data';
+import { createJobData, createStageData, createTaskData } from '../infrastructure/data';
 
 const contextManager = new AsyncHooksContextManager();
 contextManager.enable();

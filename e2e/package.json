@@ -28,25 +28,28 @@
   "homepage": "https://github.com/MapColonies/jobnik/tree/master/e2e#readme",
   "dependencies": {
     "@map-colonies/jobnik-sdk": "workspace:*",
-    "@map-colonies/tsconfig": "^1.0.1",
     "@opentelemetry/api": "catalog:",
     "@opentelemetry/context-async-hooks": "^2.1.0",
     "@opentelemetry/core": "^2.1.0",
-    "@types/node": "^24.6.0",
+    "@types/node": "catalog:",
     "prom-client": "catalog:",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vitest": "catalog:"
   },
   "devDependencies": {
-    "@faker-js/faker": "^10.0.0",
+    "@faker-js/faker": "catalog:",
     "@map-colonies/eslint-config": "^9.0.0",
     "@map-colonies/prettier-config": "catalog:",
+    "@map-colonies/tsconfig": "catalog:",
     "@vitest/eslint-plugin": "catalog:",
-    "@vitest/ui": "^3.2.4",
+    "@vitest/ui": "catalog:",
     "docker-compose": "catalog:",
     "eslint": "^10.0.0",
     "is-ci": "catalog:",
     "jobnik-manager": "workspace:*",
     "prettier": "^3.9.5"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
