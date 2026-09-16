@@ -4,6 +4,10 @@ packages:
   - e2e
 
 catalog:
+  eslint: ^10.10.0
+  '@map-colonies/eslint-config': ^9.0.0
+  '@map-colonies/tsconfig': ^2.0.0
+  '@types/node': ^24.13.3
   '@map-colonies/prettier-config': ^1.0.0
   '@map-colonies/openapi-helpers': ^5.1.0
   '@map-colonies/read-pkg': ^2.0.0
