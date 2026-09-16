@@ -339,7 +339,7 @@ describe('JobManager', () => {
             return callback(mockTx);
           });
 
-          await expect(taskManager.addTasks(jobEntity.id as StageId, [])).rejects.toThrow('db connection error');
+          await expect(taskManager.addTasks(stageEntity.id as StageId, [])).rejects.toThrow('db connection error');
         });
       });
     });

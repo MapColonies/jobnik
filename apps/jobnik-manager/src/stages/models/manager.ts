@@ -327,6 +327,8 @@ export class StageManager {
       throw new StageNotFoundError(stagesErrorMessages.stageNotFound);
     }
 
+    const jobId = stage.jobId as JobId;
+
     // Idempotent status update: if already in target status, no-op
     // This prevents errors during race conditions where multiple workers
     // try to set the same status (e.g., multiple tasks setting stage to IN_PROGRESS)
@@ -397,26 +399,26 @@ export class StageManager {
         trace.getActiveSpan()?.addEvent('Next stage set to PENDING', { nextStageId: nextStage.id });
       }
 
-      const { completedStages, totalStages } = await this.updateJobCompletionProgress(stage.jobId as JobId, tx);
+      const { completedStages, totalStages } = await this.updateJobCompletionProgress(jobId, tx);
       if (completedStages === totalStages) {
-        await this.jobManager.updateStatus(stage.jobId as JobId, JobOperationStatus.COMPLETED, tx);
+        await this.jobManager.updateStatus(jobId, JobOperationStatus.COMPLETED, tx);
         this.logger.info({
           msg: 'Job completed as all stages are done',
-          jobId: stage.jobId,
+          jobId,
         });
 
-        trace.getActiveSpan()?.addEvent('Job set to COMPLETED', { jobId: stage.jobId });
+        trace.getActiveSpan()?.addEvent('Job set to COMPLETED', { jobId });
       }
     }
 
     if (targetStatus === StageOperationStatus.IN_PROGRESS && stage.job.status === JobOperationStatus.PENDING) {
       // Update job status to IN_PROGRESS
-      await this.jobManager.updateStatus(stage.job.id as JobId, JobOperationStatus.IN_PROGRESS, tx);
-      trace.getActiveSpan()?.addEvent('Job status set to IN_PROGRESS because first stage is being processed', { jobId: stage.jobId });
+      await this.jobManager.updateStatus(jobId, JobOperationStatus.IN_PROGRESS, tx);
+      trace.getActiveSpan()?.addEvent('Job status set to IN_PROGRESS because first stage is being processed', { jobId });
     } else if (targetStatus === StageOperationStatus.FAILED) {
       // Update job status to FAILED
-      await this.jobManager.updateStatus(stage.jobId as JobId, JobOperationStatus.FAILED, tx);
-      trace.getActiveSpan()?.addEvent('Job set to FAILED because its stage failed', { jobId: stage.jobId });
+      await this.jobManager.updateStatus(jobId, JobOperationStatus.FAILED, tx);
+      trace.getActiveSpan()?.addEvent('Job set to FAILED because its stage failed', { jobId });
     }
 
     //#endregion
