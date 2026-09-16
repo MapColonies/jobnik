@@ -4,6 +4,7 @@ import { createActor } from 'xstate';
 import { trace, type Tracer } from '@opentelemetry/api';
 import { withSpanAsyncV4 } from '@map-colonies/tracing-utils';
 import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
+import type { JobId } from 'jobnik-openapi';
 import type { PrismaClient } from '@prismaClient';
 import { JobOperationStatus, Prisma, StageOperationStatus } from '@prismaClient';
 import { JobManager } from '@src/jobs/models/manager';
@@ -55,7 +56,7 @@ export class StageManager {
   ) {}
 
   @withSpanAsyncV4
-  public async addStage(jobId: string, stagePayload: StageCreateModel): Promise<StageModel> {
+  public async addStage(jobId: JobId, stagePayload: StageCreateModel): Promise<StageModel> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
@@ -172,7 +173,7 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  public async getStagesByJobId(jobId: string, includeTasks?: boolean): Promise<StageModel[]> {
+  public async getStagesByJobId(jobId: JobId, includeTasks?: boolean): Promise<StageModel[]> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
@@ -396,9 +397,9 @@ export class StageManager {
         trace.getActiveSpan()?.addEvent('Next stage set to PENDING', { nextStageId: nextStage.id });
       }
 
-      const { completedStages, totalStages } = await this.updateJobCompletionProgress(stage.jobId, tx);
+      const { completedStages, totalStages } = await this.updateJobCompletionProgress(stage.jobId as JobId, tx);
       if (completedStages === totalStages) {
-        await this.jobManager.updateStatus(stage.jobId, JobOperationStatus.COMPLETED, tx);
+        await this.jobManager.updateStatus(stage.jobId as JobId, JobOperationStatus.COMPLETED, tx);
         this.logger.info({
           msg: 'Job completed as all stages are done',
           jobId: stage.jobId,
@@ -410,11 +411,11 @@ export class StageManager {
 
     if (targetStatus === StageOperationStatus.IN_PROGRESS && stage.job.status === JobOperationStatus.PENDING) {
       // Update job status to IN_PROGRESS
-      await this.jobManager.updateStatus(stage.job.id, JobOperationStatus.IN_PROGRESS, tx);
+      await this.jobManager.updateStatus(stage.job.id as JobId, JobOperationStatus.IN_PROGRESS, tx);
       trace.getActiveSpan()?.addEvent('Job status set to IN_PROGRESS because first stage is being processed', { jobId: stage.jobId });
     } else if (targetStatus === StageOperationStatus.FAILED) {
       // Update job status to FAILED
-      await this.jobManager.updateStatus(stage.jobId, JobOperationStatus.FAILED, tx);
+      await this.jobManager.updateStatus(stage.jobId as JobId, JobOperationStatus.FAILED, tx);
       trace.getActiveSpan()?.addEvent('Job set to FAILED because its stage failed', { jobId: stage.jobId });
     }
 
@@ -449,7 +450,7 @@ export class StageManager {
         stageId: stage.id,
         jobId: stage.jobId,
       });
-      await this.updateJobCompletionProgress(stage.jobId, tx);
+      await this.updateJobCompletionProgress(stage.jobId as JobId, tx);
       trace.getActiveSpan()?.addEvent('Stage set to COMPLETED', { stageId: stage.id });
     }
   }
@@ -462,7 +463,7 @@ export class StageManager {
    * @returns The next order number for a new stage in the job.
    */
   @withSpanAsyncV4
-  private async getNextStageOrder(jobId: string): Promise<number> {
+  private async getNextStageOrder(jobId: JobId): Promise<number> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
@@ -486,7 +487,7 @@ export class StageManager {
    * @param tx transaction context.
    */
   @withSpanAsyncV4
-  private async updateJobCompletionProgress(jobId: string, tx?: PrismaTransaction): Promise<{ completedStages: number; totalStages: number }> {
+  private async updateJobCompletionProgress(jobId: JobId, tx?: PrismaTransaction): Promise<{ completedStages: number; totalStages: number }> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,

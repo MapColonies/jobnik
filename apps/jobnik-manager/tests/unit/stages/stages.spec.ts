@@ -7,6 +7,7 @@ import { trace } from '@opentelemetry/api';
 import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
 import type { PrismaClient } from '@prismaClient';
 import { Prisma, StageOperationStatus, JobOperationStatus } from '@prismaClient';
+import type { JobId } from 'jobnik-openapi';
 import { StageManager } from '@src/stages/models/manager';
 import { JobManager } from '@src/jobs/models/manager';
 import { errorMessages as jobsErrorMessages } from '@src/jobs/models/errors';
@@ -177,7 +178,7 @@ describe('JobManager', () => {
           prisma.job.findUnique.mockResolvedValue(jobEntityWithStages);
           prisma.stage.findMany.mockResolvedValue([stageEntity]);
 
-          const stage = await stageManager.getStagesByJobId(stageEntity.jobId);
+          const stage = await stageManager.getStagesByJobId(stageEntity.jobId as JobId);
 
           const { xstate, task, tracestate, ...rest } = stageEntity;
           const expectedStage = [rest];
@@ -194,7 +195,7 @@ describe('JobManager', () => {
           prisma.job.findUnique.mockResolvedValue(jobEntityWithStages);
           prisma.stage.findMany.mockResolvedValue([stageEntity]);
 
-          const stage = await stageManager.getStagesByJobId(stageEntity.jobId, true);
+          const stage = await stageManager.getStagesByJobId(stageEntity.jobId as JobId, true);
 
           const { xstate, task, tracestate, ...rest } = stageEntity;
 
@@ -216,7 +217,7 @@ describe('JobManager', () => {
           prisma.job.findUnique.mockResolvedValue(jobEntityWithStages);
           prisma.stage.findMany.mockResolvedValue(orderedStages);
 
-          const stages = await stageManager.getStagesByJobId(jobId);
+          const stages = await stageManager.getStagesByJobId(jobId as JobId);
 
           expect(stages).toMatchObject([
             { id: stage1.id, order: 1 },
@@ -230,7 +231,7 @@ describe('JobManager', () => {
         it('should failed on not founded stage when getting by non exists job', async function () {
           prisma.job.findUnique.mockResolvedValue(null);
 
-          await expect(stageManager.getStagesByJobId('some_id')).rejects.toThrow(jobsErrorMessages.jobNotFound);
+          await expect(stageManager.getStagesByJobId('some_id' as JobId)).rejects.toThrow(jobsErrorMessages.jobNotFound);
         });
       });
 
@@ -238,7 +239,7 @@ describe('JobManager', () => {
         it('should failed on db error when getting desired stage', async function () {
           prisma.job.findUnique.mockRejectedValueOnce(new Error('db connection error'));
 
-          await expect(stageManager.getStagesByJobId('some_id')).rejects.toThrow('db connection error');
+          await expect(stageManager.getStagesByJobId('some_id' as JobId)).rejects.toThrow('db connection error');
         });
       });
     });
@@ -327,7 +328,7 @@ describe('JobManager', () => {
 
           prisma.stage.create.mockResolvedValue(anotherStageEntity);
 
-          const stagesResponse = await stageManager.addStage(uniqueJobId, anotherStagePayload);
+          const stagesResponse = await stageManager.addStage(uniqueJobId as JobId, anotherStagePayload);
 
           // Extract unnecessary fields from the stage object and assemble the expected result
           const { xstate, task, tracestate, ...rest } = anotherStageEntity;
@@ -360,7 +361,7 @@ describe('JobManager', () => {
 
           prisma.stage.create.mockResolvedValue(anotherStageEntity);
 
-          const stagesResponse = await stageManager.addStage(uniqueJobId, anotherStagePayload);
+          const stagesResponse = await stageManager.addStage(uniqueJobId as JobId, anotherStagePayload);
 
           // Extract unnecessary fields from the stage object and assemble the expected result
           const { xstate, task, tracestate, ...rest } = anotherStageEntity;
@@ -392,7 +393,7 @@ describe('JobManager', () => {
 
           prisma.stage.create.mockResolvedValue(expectedStageEntity);
 
-          const result = await stageManager.addStage(uniqueJobId, stagePayload);
+          const result = await stageManager.addStage(uniqueJobId as JobId, stagePayload);
 
           expect(result).toMatchObject({
             id: expectedStageEntity.id,
@@ -424,7 +425,7 @@ describe('JobManager', () => {
 
           prisma.stage.create.mockResolvedValue(expectedStageEntity);
 
-          const result = await stageManager.addStage(uniqueJobId, stagePayload);
+          const result = await stageManager.addStage(uniqueJobId as JobId, stagePayload);
 
           expect(result).toMatchObject({
             id: expectedStageEntity.id,
@@ -473,8 +474,8 @@ describe('JobManager', () => {
 
           prisma.stage.create.mockResolvedValueOnce(expectedStageEntity1).mockResolvedValueOnce(expectedStageEntity2);
 
-          const result1 = await stageManager.addStage(jobId1, stagePayload1);
-          const result2 = await stageManager.addStage(jobId2, stagePayload2);
+          const result1 = await stageManager.addStage(jobId1 as JobId, stagePayload1);
+          const result2 = await stageManager.addStage(jobId2 as JobId, stagePayload2);
 
           expect(result1).toMatchObject({
             id: expectedStageEntity1.id,
@@ -491,13 +492,13 @@ describe('JobManager', () => {
         it('should reject adding stage to a non-existent job', async function () {
           prisma.job.findUnique.mockResolvedValue(null);
 
-          await expect(stageManager.addStage('someId', {} as unknown as StageCreateModel)).rejects.toThrow(jobsErrorMessages.jobNotFound);
+          await expect(stageManager.addStage('someId' as JobId, {} as unknown as StageCreateModel)).rejects.toThrow(jobsErrorMessages.jobNotFound);
         });
 
         it('should reject adding stage to a finite job', async function () {
           prisma.job.findUnique.mockResolvedValue({ ...jobEntityWithAbortStatus });
 
-          await expect(stageManager.addStage('someId', {} as unknown as StageCreateModel)).rejects.toThrow(
+          await expect(stageManager.addStage('someId' as JobId, {} as unknown as StageCreateModel)).rejects.toThrow(
             new JobInFiniteStateError(jobsErrorMessages.jobAlreadyFinishedStagesError)
           );
         });
@@ -510,7 +511,7 @@ describe('JobManager', () => {
           prisma.stage.aggregate.mockResolvedValueOnce({ _max: { order: null } } as StageAggregateResult); // No existing stages
           prisma.stage.create.mockRejectedValueOnce(new Error('db connection error'));
 
-          await expect(stageManager.addStage(jobEntity.id, {} as unknown as StageCreateModel)).rejects.toThrow('db connection error');
+          await expect(stageManager.addStage(jobEntity.id as JobId, {} as unknown as StageCreateModel)).rejects.toThrow('db connection error');
         });
       });
     });

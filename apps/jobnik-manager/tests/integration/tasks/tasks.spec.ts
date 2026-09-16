@@ -11,7 +11,7 @@ import {
   type RequestSender,
 } from '@map-colonies/openapi-helpers/requestSender';
 import { faker } from '@faker-js/faker';
-import { openapiFilePath, type paths, type operations } from 'jobnik-openapi';
+import { openapiFilePath, type paths, type operations, type JobId } from 'jobnik-openapi';
 import { JobOperationStatus, Priority, Prisma, StageOperationStatus, TaskOperationStatus, type PrismaClient } from '@prismaClient';
 import type { PrismaTransaction } from '@src/db/types';
 import { getApp } from '@src/app';
@@ -969,7 +969,7 @@ describe('task', function () {
         );
 
         const secondStage = await requestSender.addStageV1({
-          pathParams: { jobId: stage.jobId },
+          pathParams: { jobId: stage.jobId as JobId },
           requestBody: {
             type: 'Second Stage',
             data: {},
@@ -990,7 +990,7 @@ describe('task', function () {
         const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId } });
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId } });
         const getSecondStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: secondStage.body.id } });
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: stage.jobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: stage.jobId as JobId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
         expect(getTaskResponse.body).toMatchObject(expectedTaskStatus);
@@ -1023,7 +1023,7 @@ describe('task', function () {
 
         const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId } });
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId } });
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: stage.jobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: stage.jobId as JobId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
         expect(getTaskResponse.body).toMatchObject(expectedTaskStatus);
@@ -1239,7 +1239,7 @@ describe('task', function () {
         });
 
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId } });
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
 
         expect(dequeueResponse).toSatisfyApiSpec();
         expect(dequeueResponse).toMatchObject({
@@ -1596,7 +1596,7 @@ describe('task', function () {
 
         const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId } });
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId } });
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
 
         expect(dequeueResponse).toSatisfyApiSpec();
         expect(dequeueResponse).toMatchObject({
