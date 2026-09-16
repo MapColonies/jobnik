@@ -2,11 +2,11 @@ import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { jsLogger } from '@map-colonies/js-logger';
 import { faker } from '@faker-js/faker';
 import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
+import type { StageId } from 'jobnik-openapi';
 import type { PrismaClient } from '@prismaClient';
 import { TaskOperationStatus } from '@prismaClient';
 import type { UpdateSummaryCount } from '@src/stages/models/models';
 import { defaultStatusCounts } from '@src/stages/models/helper';
-import type { StageId } from 'jobnik-openapi';
 import { StageRepository } from '@src/stages/DAL/stageRepository';
 import { createStageEntity } from '../generator';
 

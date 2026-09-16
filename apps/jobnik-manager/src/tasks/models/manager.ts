@@ -5,7 +5,7 @@ import { trace, type Tracer } from '@opentelemetry/api';
 import { withSpanAsyncV4 } from '@map-colonies/tracing-utils';
 import { subMinutes } from 'date-fns';
 import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
-import type { StageId } from 'jobnik-openapi';
+import type { StageId, TaskId } from 'jobnik-openapi';
 import { Prisma, StageOperationStatus, Task, TaskOperationStatus, type PrismaClient } from '@prismaClient';
 import { SERVICES, XSTATE_DONE_STATE } from '@common/constants';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
@@ -140,7 +140,7 @@ export class TaskManager {
   }
 
   @withSpanAsyncV4
-  public async getTaskById(taskId: string): Promise<TaskModel> {
+  public async getTaskById(taskId: TaskId): Promise<TaskModel> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
@@ -176,7 +176,7 @@ export class TaskManager {
   }
 
   @withSpanAsyncV4
-  public async updateUserMetadata(taskId: string, userMetadata: Record<string, unknown>): Promise<void> {
+  public async updateUserMetadata(taskId: TaskId, userMetadata: Record<string, unknown>): Promise<void> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
@@ -201,7 +201,7 @@ export class TaskManager {
   }
 
   @withSpanAsyncV4
-  public async updateStatus(taskId: string, status: TaskOperationStatus, tx?: PrismaTransaction): Promise<TaskModel> {
+  public async updateStatus(taskId: TaskId, status: TaskOperationStatus, tx?: PrismaTransaction): Promise<TaskModel> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
@@ -248,7 +248,7 @@ export class TaskManager {
    * @returns The task entity if found, otherwise null.
    */
   @withSpanAsyncV4
-  public async getTaskEntityById(taskId: string, tx?: PrismaTransaction): Promise<TaskPrismaObject | null> {
+  public async getTaskEntityById(taskId: TaskId, tx?: PrismaTransaction): Promise<TaskPrismaObject | null> {
     trace.getActiveSpan()?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
     });
@@ -353,7 +353,7 @@ export class TaskManager {
    * @returns The updated task model
    */
   @withSpanAsyncV4
-  private async executeUpdateStatus(taskId: string, status: TaskOperationStatus, tx: PrismaTransaction): Promise<TaskModel> {
+  private async executeUpdateStatus(taskId: TaskId, status: TaskOperationStatus, tx: PrismaTransaction): Promise<TaskModel> {
     const task = await this.getTaskEntityById(taskId, tx);
 
     if (!task) {
@@ -425,7 +425,7 @@ export class TaskManager {
 
     // Create update query with race condition protection for IN_PROGRESS
     const updateQueryBody = {
-      where: this.createUpdateWhereClause(task.id, previousStatus),
+      where: this.createUpdateWhereClause(task.id as TaskId, previousStatus),
       data: { ...taskDataToUpdate, status: nextStatus, xstate: newPersistedSnapshot, startTime, endTime },
     };
 
@@ -511,7 +511,7 @@ export class TaskManager {
    * @param previousStatus - The expected current status to prevent race conditions.
    * @returns The filter object for the update query.
    */
-  private createUpdateWhereClause(taskId: string, previousStatus: TaskOperationStatus): { id: string; status: TaskOperationStatus } {
+  private createUpdateWhereClause(taskId: TaskId, previousStatus: TaskOperationStatus): { id: string; status: TaskOperationStatus } {
     return { id: taskId, status: previousStatus };
   }
 
@@ -544,7 +544,7 @@ export class TaskManager {
     // Process tasks sequentially to avoid overwhelming the database
     for (const task of staleTasks) {
       try {
-        await this.updateStatus(task.id, TaskOperationStatus.FAILED);
+        await this.updateStatus(task.id as TaskId, TaskOperationStatus.FAILED);
         successCount++;
 
         this.logger.debug({

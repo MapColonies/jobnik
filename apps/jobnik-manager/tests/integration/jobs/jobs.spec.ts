@@ -10,7 +10,7 @@ import {
   type ExpectResponseStatus,
   type RequestSender,
 } from '@map-colonies/openapi-helpers/requestSender';
-import { openapiFilePath, type paths, type operations } from 'jobnik-openapi';
+import { openapiFilePath, type paths, type operations, type JobId } from 'jobnik-openapi';
 import { JobOperationStatus, Priority, StageOperationStatus, type PrismaClient } from '@prismaClient';
 import type { PrismaTransaction } from '@src/db/types';
 import { getApp } from '@src/app';
@@ -373,7 +373,7 @@ describe('job', function () {
         const { job } = await createJobnikTree(prisma, { name: 'SOME_UNIQUE_NAME' }, {}, [], { createStage: true, createTasks: false });
         const jobId = job.id;
 
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
 
         expect(getJobResponse).toSatisfyApiSpec();
         expect(getJobResponse).toMatchObject({ status: StatusCodes.OK, body: { status: JobOperationStatus.CREATED, name: 'SOME_UNIQUE_NAME' } });
@@ -387,7 +387,10 @@ describe('job', function () {
         });
         const jobId = job.id;
 
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId }, queryParams: { should_return_stages: true } });
+        const getJobResponse = await requestSender.getJobByIdV1({
+          pathParams: { jobId: jobId as JobId },
+          queryParams: { should_return_stages: true },
+        });
 
         expect(getJobResponse).toSatisfyApiSpec();
         expect(getJobResponse).toMatchObject({
@@ -404,7 +407,10 @@ describe('job', function () {
         });
         const jobId = job.id;
 
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId }, queryParams: { should_return_stages: false } });
+        const getJobResponse = await requestSender.getJobByIdV1({
+          pathParams: { jobId: jobId as JobId },
+          queryParams: { should_return_stages: false },
+        });
 
         expect(getJobResponse).toSatisfyApiSpec();
         expect(getJobResponse).toMatchObject({ status: StatusCodes.OK, body: { status: JobOperationStatus.CREATED, name: 'SOME_UNIQUE_NAME' } });
@@ -414,7 +420,7 @@ describe('job', function () {
 
     describe('Bad Path', function () {
       it('should return a 404 status code along with a specific validation error message detailing the non exists job', async function () {
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: testJobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: testJobId as JobId } });
 
         expect(getJobResponse).toSatisfyApiSpec();
         expect(getJobResponse).toMatchObject({
@@ -424,7 +430,7 @@ describe('job', function () {
       });
 
       it('should return status code 400 when supplying bad uuid as part of the request', async function () {
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: 'someInvalidJobId' } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: 'someInvalidJobId' as JobId } });
 
         expect(getJobResponse).toSatisfyApiSpec();
         expect(getJobResponse).toMatchObject({
@@ -440,7 +446,7 @@ describe('job', function () {
         const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
         findUniqueSpy.mockRejectedValueOnce(error);
 
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: testJobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: testJobId as JobId } });
 
         expect(getJobResponse).toSatisfyApiSpec();
         expect(getJobResponse).toMatchObject({
@@ -453,7 +459,7 @@ describe('job', function () {
         const error = createMockUnknownDbError();
         const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
         findUniqueSpy.mockRejectedValueOnce(error);
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: testJobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: testJobId as JobId } });
 
         expect(getJobResponse).toSatisfyApiSpec();
         expect(getJobResponse).toMatchObject({
@@ -475,11 +481,11 @@ describe('job', function () {
         const jobId = job.id;
 
         const updateUserMetadataResponse = await requestSender.updateUserMetadataV1({
-          pathParams: { jobId },
+          pathParams: { jobId: jobId as JobId },
           requestBody: userMetadataInput,
         });
 
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
 
         expect(updateUserMetadataResponse).toSatisfyApiSpec();
         expect(getJobResponse.body).toMatchObject({ userMetadata: userMetadataInput });
@@ -488,7 +494,7 @@ describe('job', function () {
 
     describe('Bad Path', function () {
       it('should return a 404 status code along with a message that specifies that a job with the given id was not found', async function () {
-        const getJobResponse = await requestSender.updateUserMetadataV1({ pathParams: { jobId: testJobId }, requestBody: { avi: 'avi' } });
+        const getJobResponse = await requestSender.updateUserMetadataV1({ pathParams: { jobId: testJobId as JobId }, requestBody: { avi: 'avi' } });
 
         expect(getJobResponse).toSatisfyApiSpec();
         expect(getJobResponse).toMatchObject({
@@ -499,7 +505,7 @@ describe('job', function () {
 
       it('should return a 400 status code along with a message that specifies that body not valid (should be json)', async function () {
         const getJobResponse = await requestSender.updateUserMetadataV1({
-          pathParams: { jobId: testJobId },
+          pathParams: { jobId: testJobId as JobId },
           requestBody: 'badType' as unknown as { avi: 'avi' },
         });
 
@@ -517,7 +523,7 @@ describe('job', function () {
         const updateSpy = createProxyMock(prisma.job, 'update');
         updateSpy.mockRejectedValueOnce(error);
 
-        const response = await requestSender.updateUserMetadataV1({ pathParams: { jobId: testJobId }, requestBody: {} });
+        const response = await requestSender.updateUserMetadataV1({ pathParams: { jobId: testJobId as JobId }, requestBody: {} });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -531,7 +537,7 @@ describe('job', function () {
         const updateSpy = createProxyMock(prisma.job, 'update');
         updateSpy.mockRejectedValueOnce(error);
 
-        const response = await requestSender.updateUserMetadataV1({ pathParams: { jobId: testJobId }, requestBody: {} });
+        const response = await requestSender.updateUserMetadataV1({ pathParams: { jobId: testJobId as JobId }, requestBody: {} });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -552,11 +558,11 @@ describe('job', function () {
         const jobId = job.id;
 
         const setPriorityResponse = await requestSender.updateJobPriorityV1({
-          pathParams: { jobId },
+          pathParams: { jobId: jobId as JobId },
           requestBody: { priority: Priority.VERY_HIGH },
         });
 
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
 
         expect(setPriorityResponse).toSatisfyApiSpec();
         expect(getJobResponse.body).toMatchObject({ priority: Priority.VERY_HIGH });
@@ -570,7 +576,7 @@ describe('job', function () {
         const jobId = job.id;
 
         const setPriorityResponse = await requestSender.updateJobPriorityV1({
-          pathParams: { jobId },
+          pathParams: { jobId: jobId as JobId },
 
           requestBody: { priority: Priority.VERY_HIGH },
         });
@@ -586,7 +592,7 @@ describe('job', function () {
     describe('Bad Path', function () {
       it('should return 404 with specific error message for non-existent job', async function () {
         const getJobResponse = await requestSender.updateJobPriorityV1({
-          pathParams: { jobId: testJobId },
+          pathParams: { jobId: testJobId as JobId },
           requestBody: { priority: Priority.VERY_HIGH },
         });
 
@@ -599,7 +605,7 @@ describe('job', function () {
 
       it('should return 400 with specific error message for non-existent priority', async function () {
         const getJobResponse = await requestSender.updateJobPriorityV1({
-          pathParams: { jobId: testJobId },
+          pathParams: { jobId: testJobId as JobId },
           requestBody: { priority: 'MEGA_HIGH' as unknown as Priority },
         });
 
@@ -620,7 +626,10 @@ describe('job', function () {
         const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
         findUniqueSpy.mockRejectedValueOnce(error);
 
-        const response = await requestSender.updateJobPriorityV1({ pathParams: { jobId: testJobId }, requestBody: { priority: Priority.VERY_HIGH } });
+        const response = await requestSender.updateJobPriorityV1({
+          pathParams: { jobId: testJobId as JobId },
+          requestBody: { priority: Priority.VERY_HIGH },
+        });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -634,7 +643,10 @@ describe('job', function () {
         const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
         findUniqueSpy.mockRejectedValueOnce(error);
 
-        const response = await requestSender.updateJobPriorityV1({ pathParams: { jobId: testJobId }, requestBody: { priority: Priority.VERY_HIGH } });
+        const response = await requestSender.updateJobPriorityV1({
+          pathParams: { jobId: testJobId as JobId },
+          requestBody: { priority: Priority.VERY_HIGH },
+        });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -655,14 +667,14 @@ describe('job', function () {
         const jobId = job.id;
 
         const setStatusResponse = await requestSender.updateStatusV1({
-          pathParams: { jobId },
+          pathParams: { jobId: jobId as JobId },
           requestBody: { status: JobOperationStatus.PENDING },
         });
 
         expect(setStatusResponse).toSatisfyApiSpec();
         expect(setStatusResponse).toHaveProperty('status', StatusCodes.OK);
 
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
 
         expect(getJobResponse).toHaveProperty('body.status', JobOperationStatus.PENDING);
       });
@@ -683,7 +695,7 @@ describe('job', function () {
         const jobId = job.id;
 
         const setStatusResponse = await requestSender.updateStatusV1({
-          pathParams: { jobId },
+          pathParams: { jobId: jobId as JobId },
           requestBody: { status: JobOperationStatus.PAUSED },
         });
 
@@ -702,7 +714,7 @@ describe('job', function () {
         const jobId = job.id;
 
         const setStatusResponse = await requestSender.updateStatusV1({
-          pathParams: { jobId },
+          pathParams: { jobId: jobId as JobId },
           // @ts-expect-error - COMPLETED is a system-managed status and cannot be set via the user-controllable status update endpoint; this test ensures such values are rejected by the API
           requestBody: { status: JobOperationStatus.COMPLETED },
         });
@@ -719,7 +731,7 @@ describe('job', function () {
 
       it('should return 404 with specific error message for non-existent job', async function () {
         const getJobResponse = await requestSender.updateStatusV1({
-          pathParams: { jobId: testJobId },
+          pathParams: { jobId: testJobId as JobId },
           requestBody: { status: JobOperationStatus.PAUSED },
         });
 
@@ -732,7 +744,7 @@ describe('job', function () {
 
       it('should return status code 400 when supplying bad uuid as part of the request', async function () {
         const getJobResponse = await requestSender.updateStatusV1({
-          pathParams: { jobId: 'someBadUuid' },
+          pathParams: { jobId: 'someBadUuid' as JobId },
           requestBody: { status: JobOperationStatus.PENDING },
         });
 
@@ -760,7 +772,7 @@ describe('job', function () {
         });
 
         const response = await requestSender.updateStatusV1({
-          pathParams: { jobId: testJobId },
+          pathParams: { jobId: testJobId as JobId },
           requestBody: { status: JobOperationStatus.PENDING },
         });
 
@@ -787,7 +799,7 @@ describe('job', function () {
         });
 
         const response = await requestSender.updateStatusV1({
-          pathParams: { jobId: testJobId },
+          pathParams: { jobId: testJobId as JobId },
           requestBody: { status: JobOperationStatus.PENDING },
         });
 
@@ -803,9 +815,9 @@ describe('job', function () {
         const job = await createJobRecord(createJobRequestBody, prisma);
         const createdJobId = job.id;
 
-        await requestSender.updateStatusV1({ pathParams: { jobId: createdJobId }, requestBody: { status: JobOperationStatus.ABORTED } });
-        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: createdJobId } });
-        const validateDeletionResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: createdJobId } });
+        await requestSender.updateStatusV1({ pathParams: { jobId: createdJobId as JobId }, requestBody: { status: JobOperationStatus.ABORTED } });
+        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: createdJobId as JobId } });
+        const validateDeletionResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: createdJobId as JobId } });
 
         expect(deleteJobResponse).toSatisfyApiSpec();
         expect(deleteJobResponse).toMatchObject({
@@ -826,8 +838,8 @@ describe('job', function () {
         });
         const jobId = job.id;
 
-        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId } });
-        const validateDeletionResponse = await requestSender.getJobByIdV1({ pathParams: { jobId } });
+        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: jobId as JobId } });
+        const validateDeletionResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
 
         expect(deleteJobResponse).toSatisfyApiSpec();
         expect(deleteJobResponse).toMatchObject({
@@ -844,7 +856,7 @@ describe('job', function () {
 
     describe('Bad Path', function () {
       it('should return status code 400 when supplying bad uuid as part of the request', async function () {
-        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: 'someInvalidJobId' } });
+        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: 'someInvalidJobId' as JobId } });
 
         expect(deleteJobResponse).toSatisfyApiSpec();
         expect(deleteJobResponse).toMatchObject({
@@ -860,7 +872,7 @@ describe('job', function () {
         });
         const jobId = job.id;
 
-        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId } });
+        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: jobId as JobId } });
 
         expect(deleteJobResponse).toSatisfyApiSpec();
         expect(deleteJobResponse).toMatchObject({
@@ -870,7 +882,7 @@ describe('job', function () {
       });
 
       it('should return 404 with specific error message for non-existent job', async function () {
-        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: testJobId } });
+        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: testJobId as JobId } });
 
         expect(deleteJobResponse).toSatisfyApiSpec();
         expect(deleteJobResponse).toMatchObject({
@@ -887,7 +899,7 @@ describe('job', function () {
         findUniqueSpy.mockRejectedValueOnce(error);
 
         const deleteJobResponse = await requestSender.deleteJobV1({
-          pathParams: { jobId: testJobId },
+          pathParams: { jobId: testJobId as JobId },
         });
 
         expect(deleteJobResponse).toSatisfyApiSpec();
@@ -903,7 +915,7 @@ describe('job', function () {
         findUniqueSpy.mockRejectedValueOnce(error);
 
         const deleteJobResponse = await requestSender.deleteJobV1({
-          pathParams: { jobId: testJobId },
+          pathParams: { jobId: testJobId as JobId },
         });
 
         expect(deleteJobResponse).toSatisfyApiSpec();

@@ -5,6 +5,7 @@ import { faker } from '@faker-js/faker';
 import { trace } from '@opentelemetry/api';
 import { subHours, subMinutes } from 'date-fns';
 import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
+import type { StageId, TaskId } from 'jobnik-openapi';
 import type { PrismaClient } from '@prismaClient';
 import { Prisma, StageOperationStatus, TaskOperationStatus, JobOperationStatus } from '@prismaClient';
 import { StageManager } from '@src/stages/models/manager';
@@ -143,7 +144,7 @@ describe('JobManager', () => {
           const taskId = taskEntity.id;
           prisma.task.findUnique.mockResolvedValue(taskEntity);
 
-          const task = await taskManager.getTaskById(taskId);
+          const task = await taskManager.getTaskById(taskId as TaskId);
 
           const { creationTime, updateTime, xstate, startTime, endTime, ...rest } = taskEntity;
           const expectedTask = { ...rest, tracestate: undefined, creationTime: creationTime.toISOString(), updateTime: updateTime.toISOString() };
@@ -156,7 +157,7 @@ describe('JobManager', () => {
         it('should result in failure when attempting to retrieve a task with a non-existent id', async function () {
           prisma.task.findUnique.mockResolvedValue(null);
 
-          await expect(taskManager.getTaskById('some_id')).rejects.toThrow(tasksErrorMessages.taskNotFound);
+          await expect(taskManager.getTaskById('some_id' as TaskId)).rejects.toThrow(tasksErrorMessages.taskNotFound);
         });
       });
 
@@ -164,7 +165,7 @@ describe('JobManager', () => {
         it('should fail and throw an error if prisma throws an error', async function () {
           prisma.task.findUnique.mockRejectedValueOnce(new Error('db connection error'));
 
-          await expect(taskManager.getTaskById('some_id')).rejects.toThrow('db connection error');
+          await expect(taskManager.getTaskById('some_id' as TaskId)).rejects.toThrow('db connection error');
         });
       });
     });
@@ -178,7 +179,7 @@ describe('JobManager', () => {
           prisma.task.findMany.mockResolvedValue([taskEntity]);
           prisma.task.count.mockResolvedValue(1);
 
-          const result = await taskManager.getTasksByStageId(stageEntity.id, {});
+          const result = await taskManager.getTasksByStageId(stageEntity.id as StageId, {});
 
           const { creationTime, updateTime, xstate, startTime, endTime, ...rest } = taskEntity;
           const expectedTask = [{ ...rest, tracestate: undefined, creationTime: creationTime.toISOString(), updateTime: updateTime.toISOString() }];
@@ -192,7 +193,7 @@ describe('JobManager', () => {
         it('should failed on not founded task when getting by non exists stage', async function () {
           prisma.stage.findUnique.mockResolvedValue(null);
 
-          await expect(taskManager.getTasksByStageId('some_id', {})).rejects.toThrow(stagesErrorMessages.stageNotFound);
+          await expect(taskManager.getTasksByStageId('some_id' as StageId, {})).rejects.toThrow(stagesErrorMessages.stageNotFound);
         });
       });
 
@@ -200,7 +201,7 @@ describe('JobManager', () => {
         it('should fail and throw an error if prisma throws an error', async function () {
           prisma.stage.findUnique.mockRejectedValueOnce(new Error('db connection error'));
 
-          await expect(taskManager.getTasksByStageId('some_id', {})).rejects.toThrow('db connection error');
+          await expect(taskManager.getTasksByStageId('some_id' as StageId, {})).rejects.toThrow('db connection error');
         });
       });
     });
@@ -212,7 +213,7 @@ describe('JobManager', () => {
 
           prisma.task.update.mockResolvedValue(taskEntity);
 
-          await expect(taskManager.updateUserMetadata(taskEntity.id, { newData: 'test' })).toResolve();
+          await expect(taskManager.updateUserMetadata(taskEntity.id as TaskId, { newData: 'test' })).toResolve();
         });
       });
 
@@ -220,7 +221,9 @@ describe('JobManager', () => {
         it('should failed on for not exists task when update user metadata', async function () {
           prisma.task.update.mockRejectedValue(notFoundError);
 
-          await expect(taskManager.updateUserMetadata('someId', { testData: 'some new data' })).rejects.toThrow(tasksErrorMessages.taskNotFound);
+          await expect(taskManager.updateUserMetadata('someId' as TaskId, { testData: 'some new data' })).rejects.toThrow(
+            tasksErrorMessages.taskNotFound
+          );
         });
       });
 
@@ -228,7 +231,7 @@ describe('JobManager', () => {
         it('should fail and throw an error if prisma throws an error', async function () {
           prisma.task.update.mockRejectedValueOnce(new Error('db connection error'));
 
-          await expect(taskManager.updateUserMetadata('someId', { testData: 'some new data' })).rejects.toThrow('db connection error');
+          await expect(taskManager.updateUserMetadata('someId' as TaskId, { testData: 'some new data' })).rejects.toThrow('db connection error');
         });
       });
     });
@@ -262,7 +265,7 @@ describe('JobManager', () => {
             userMetadata: { someData: '123' },
           } satisfies TaskCreateModel;
 
-          const tasksResponse = await taskManager.addTasks(stageId, [taskPayload]);
+          const tasksResponse = await taskManager.addTasks(stageId as StageId, [taskPayload]);
 
           // Extract unnecessary fields from the job object and assemble the expected result
           const { creationTime, updateTime, xstate, startTime, endTime, ...rest } = taskEntity;
@@ -277,7 +280,7 @@ describe('JobManager', () => {
         it('should reject adding tasks to a non-existent stage', async function () {
           prisma.stage.findUnique.mockResolvedValue(null);
 
-          await expect(taskManager.addTasks('someId', [])).rejects.toThrow(stagesErrorMessages.stageNotFound);
+          await expect(taskManager.addTasks('someId' as StageId, [])).rejects.toThrow(stagesErrorMessages.stageNotFound);
         });
 
         it('should reject adding tasks to job with IN_PROGRESS stage', async function () {
@@ -295,7 +298,7 @@ describe('JobManager', () => {
           prisma.stage.findUnique.mockResolvedValue(stageEntity);
           prisma.job.findUnique.mockResolvedValue(jobEntity);
 
-          await expect(taskManager.addTasks('someId', [])).rejects.toThrow(
+          await expect(taskManager.addTasks('someId' as StageId, [])).rejects.toThrow(
             new NotAllowedToAddTasksToInProgressStageError(tasksErrorMessages.addTaskNotAllowed)
           );
         });
@@ -309,7 +312,7 @@ describe('JobManager', () => {
 
           prisma.stage.findUnique.mockResolvedValue(stageEntity);
 
-          await expect(taskManager.addTasks('someId', [])).rejects.toThrow(
+          await expect(taskManager.addTasks('someId' as StageId, [])).rejects.toThrow(
             new StageInFiniteStateError(stagesErrorMessages.stageAlreadyFinishedTasksError)
           );
         });
@@ -336,7 +339,7 @@ describe('JobManager', () => {
             return callback(mockTx);
           });
 
-          await expect(taskManager.addTasks(jobEntity.id, [])).rejects.toThrow('db connection error');
+          await expect(taskManager.addTasks(jobEntity.id as StageId, [])).rejects.toThrow('db connection error');
         });
       });
     });
@@ -376,7 +379,7 @@ describe('JobManager', () => {
           vi.spyOn(stageManager, 'updateStatus').mockResolvedValue(undefined);
           vi.spyOn(stageManager, 'updateStageProgressFromTaskChanges').mockResolvedValue(undefined);
 
-          await expect(taskManager.updateStatus(taskId, TaskOperationStatus.COMPLETED)).toResolve();
+          await expect(taskManager.updateStatus(taskId as TaskId, TaskOperationStatus.COMPLETED)).toResolve();
         });
 
         it('should update task status to RETRIED', async function () {
@@ -412,7 +415,7 @@ describe('JobManager', () => {
 
           vi.spyOn(stageManager, 'updateStageProgressFromTaskChanges').mockResolvedValue(undefined);
 
-          await expect(taskManager.updateStatus(taskId, TaskOperationStatus.FAILED)).toResolve();
+          await expect(taskManager.updateStatus(taskId as TaskId, TaskOperationStatus.FAILED)).toResolve();
         });
 
         it('should update task status to IN_PROGRESS and add startTime', async function () {
@@ -448,7 +451,7 @@ describe('JobManager', () => {
 
           vi.spyOn(stageManager, 'updateStageProgressFromTaskChanges').mockResolvedValue(undefined);
 
-          await expect(taskManager.updateStatus(taskId, TaskOperationStatus.IN_PROGRESS)).toResolve();
+          await expect(taskManager.updateStatus(taskId as TaskId, TaskOperationStatus.IN_PROGRESS)).toResolve();
         });
 
         it('should update task status to FAILED and add endTime', async function () {
@@ -495,7 +498,7 @@ describe('JobManager', () => {
 
           vi.spyOn(stageManager, 'updateStageProgressFromTaskChanges').mockResolvedValue(undefined);
 
-          await expect(taskManager.updateStatus(taskId, TaskOperationStatus.FAILED)).toResolve();
+          await expect(taskManager.updateStatus(taskId as TaskId, TaskOperationStatus.FAILED)).toResolve();
         });
 
         it('should update task status to IN_PROGRESS', async function () {
@@ -531,7 +534,7 @@ describe('JobManager', () => {
 
           vi.spyOn(stageManager, 'updateStageProgressFromTaskChanges').mockResolvedValue(undefined);
 
-          await expect(taskManager.updateStatus(taskId, TaskOperationStatus.IN_PROGRESS)).toResolve();
+          await expect(taskManager.updateStatus(taskId as TaskId, TaskOperationStatus.IN_PROGRESS)).toResolve();
         });
       });
 
@@ -547,7 +550,7 @@ describe('JobManager', () => {
             return callback(mockTx);
           });
 
-          await expect(taskManager.updateStatus('someId', TaskOperationStatus.COMPLETED)).rejects.toThrow(tasksErrorMessages.taskNotFound);
+          await expect(taskManager.updateStatus('someId' as TaskId, TaskOperationStatus.COMPLETED)).rejects.toThrow(tasksErrorMessages.taskNotFound);
         });
 
         it("should reject update invalid task's status [from IN_PROGRESS to CREATED]", async function () {
@@ -574,7 +577,7 @@ describe('JobManager', () => {
             return callback(mockTx);
           });
 
-          await expect(taskManager.updateStatus(taskId, TaskOperationStatus.CREATED)).rejects.toThrow(IllegalTaskStatusTransitionError);
+          await expect(taskManager.updateStatus(taskId as TaskId, TaskOperationStatus.CREATED)).rejects.toThrow(IllegalTaskStatusTransitionError);
         });
       });
 
@@ -590,7 +593,7 @@ describe('JobManager', () => {
             return callback(mockTx);
           });
 
-          await expect(taskManager.updateStatus(faker.string.uuid(), TaskOperationStatus.PENDING)).rejects.toThrow('db connection error');
+          await expect(taskManager.updateStatus(faker.string.uuid() as TaskId, TaskOperationStatus.PENDING)).rejects.toThrow('db connection error');
         });
       });
     });
@@ -697,8 +700,8 @@ describe('JobManager', () => {
         it('should successfully clean stale tasks and update them to FAILED status', async function () {
           prisma.task.findMany.mockResolvedValue([staleTaskOneHour, staleTaskFortyFiveMinutes]);
           const updateStatusMock = vi.spyOn(taskManager, 'updateStatus').mockResolvedValue({
-            id: staleTaskOneHour.id,
-            stageId: staleTaskOneHour.stageId,
+            id: staleTaskOneHour.id as TaskId,
+            stageId: staleTaskOneHour.stageId as StageId,
             status: TaskOperationStatus.FAILED,
             attempts: 0,
             maxAttempts: 2,
@@ -731,8 +734,8 @@ describe('JobManager', () => {
           const updateStatusMock = vi
             .spyOn(taskManager, 'updateStatus')
             .mockResolvedValueOnce({
-              id: staleTaskOneHour.id,
-              stageId: staleTaskOneHour.stageId,
+              id: staleTaskOneHour.id as TaskId,
+              stageId: staleTaskOneHour.stageId as StageId,
               status: TaskOperationStatus.FAILED,
               attempts: 0,
               maxAttempts: 2,

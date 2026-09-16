@@ -280,6 +280,6 @@ export class JobManager {
       stages: Array.isArray(stage) ? convertArrayPrismaStageToStageResponse(stage) : undefined,
     };
 
-    return Object.assign(rest, transformedFields);
+    return Object.assign(rest, transformedFields) as unknown as JobModel;
   }
 }
