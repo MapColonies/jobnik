@@ -1,4 +1,5 @@
 export type { paths, components, operations, TypedRequestHandlers } from './openapi';
+export type { JobId, StageId, TaskId } from './brands';
 
 /**
  * Absolute path to the bundled OpenAPI specification file, resolved through the module
