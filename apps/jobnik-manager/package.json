@@ -64,7 +64,7 @@
     "@prisma/adapter-pg": "^6.19.0",
     "@prisma/client": "^6.19.0",
     "@prisma/instrumentation": "^6.19.0",
-    "compression": "^1.8.1",
+    "compression": "^1.8.2",
     "date-fns": "^4.1.0",
     "express": "^4.21.2",
     "express-openapi-validator": "^5.6.0",
