@@ -5,6 +5,7 @@ import { trace, type Tracer } from '@opentelemetry/api';
 import { withSpanAsyncV4 } from '@map-colonies/tracing-utils';
 import { subMinutes } from 'date-fns';
 import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
+import type { StageId } from 'jobnik-openapi';
 import { Prisma, StageOperationStatus, Task, TaskOperationStatus, type PrismaClient } from '@prismaClient';
 import { SERVICES, XSTATE_DONE_STATE } from '@common/constants';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
@@ -42,7 +43,7 @@ export class TaskManager {
   ) {}
 
   @withSpanAsyncV4
-  public async addTasks(stageId: string, tasksPayload: TaskCreateModel[]): Promise<TaskModel[]> {
+  public async addTasks(stageId: StageId, tasksPayload: TaskCreateModel[]): Promise<TaskModel[]> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
@@ -155,7 +156,7 @@ export class TaskManager {
   }
 
   @withSpanAsyncV4
-  public async getTasksByStageId(stageId: string, query: TasksByStageIdQuery): Promise<TasksPaginatedResponse> {
+  public async getTasksByStageId(stageId: StageId, query: TasksByStageIdQuery): Promise<TasksPaginatedResponse> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
@@ -442,13 +443,13 @@ export class TaskManager {
       throw new TaskStatusUpdateFailedError(tasksErrorMessages.taskStatusUpdateFailed);
     }
 
-    await this.updateStageSummary(task.stageId, previousStatus, nextStatus, tx);
+    await this.updateStageSummary(task.stageId as StageId, previousStatus, nextStatus, tx);
 
     // TODO - Check if this stage type should propagate failure to parent job
     // For now, all task failures cause stage failure, but in future versions
     // some stages may be configured as optional (non-blocking)
     if (nextStatus === TaskOperationStatus.FAILED) {
-      const stage = await this.stageManager.getStageEntityById(task.stageId, { tx });
+      const stage = await this.stageManager.getStageEntityById(task.stageId as StageId, { tx });
 
       /* v8 ignore next 7 -- @preserve */
       if (!stage) {
@@ -466,7 +467,7 @@ export class TaskManager {
         stageId: task.stageId,
       });
 
-      await this.stageManager.updateStatus(task.stageId, StageOperationStatus.FAILED, tx);
+      await this.stageManager.updateStatus(task.stageId as StageId, StageOperationStatus.FAILED, tx);
       trace.getActiveSpan()?.addEvent('Stage set to FAILED', { stageId: task.stageId });
     }
 
@@ -515,7 +516,7 @@ export class TaskManager {
   }
 
   private async updateStageSummary(
-    stageId: string,
+    stageId: StageId,
     previousStatus: TaskOperationStatus,
     nextStatus: TaskOperationStatus,
     tx: PrismaTransaction

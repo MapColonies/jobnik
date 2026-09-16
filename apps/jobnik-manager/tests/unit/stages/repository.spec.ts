@@ -6,6 +6,7 @@ import type { PrismaClient } from '@prismaClient';
 import { TaskOperationStatus } from '@prismaClient';
 import type { UpdateSummaryCount } from '@src/stages/models/models';
 import { defaultStatusCounts } from '@src/stages/models/helper';
+import type { StageId } from 'jobnik-openapi';
 import { StageRepository } from '@src/stages/DAL/stageRepository';
 import { createStageEntity } from '../generator';
 
@@ -36,7 +37,7 @@ describe('JobManager', () => {
             add: { status: TaskOperationStatus.CREATED, count: 1 },
           } satisfies UpdateSummaryCount;
 
-          await expect(stageRepository.updateStageSummary(stageEntity.id, summaryUpdatePayload, mockTx)).toResolve();
+          await expect(stageRepository.updateStageSummary(stageEntity.id as StageId, summaryUpdatePayload, mockTx)).toResolve();
         });
 
         it('should not increase total count and change counting of other', async function () {
@@ -52,7 +53,7 @@ describe('JobManager', () => {
             remove: { status: TaskOperationStatus.CREATED, count: 1 },
           } satisfies UpdateSummaryCount;
 
-          await expect(stageRepository.updateStageSummary(stageEntity.id, summaryUpdatePayload, mockTx)).toResolve();
+          await expect(stageRepository.updateStageSummary(stageEntity.id as StageId, summaryUpdatePayload, mockTx)).toResolve();
         });
       });
 
@@ -70,7 +71,7 @@ describe('JobManager', () => {
             remove: { status: TaskOperationStatus.CREATED, count: 1 },
           } satisfies UpdateSummaryCount;
 
-          await expect(stageRepository.updateStageSummary(stageEntity.id, summaryUpdatePayload, mockTx)).rejects.toThrow(
+          await expect(stageRepository.updateStageSummary(stageEntity.id as StageId, summaryUpdatePayload, mockTx)).rejects.toThrow(
             'Failed to update stage summary: No summary returned from database.'
           );
         });
@@ -85,7 +86,7 @@ describe('JobManager', () => {
             $queryRaw: vi.fn().mockRejectedValueOnce(new Error('db connection error')),
           } as unknown as Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
 
-          await expect(stageRepository.updateStageSummary('someId', summaryUpdatePayload, mockTx)).rejects.toThrow('db connection error');
+          await expect(stageRepository.updateStageSummary('someId' as StageId, summaryUpdatePayload, mockTx)).rejects.toThrow('db connection error');
         });
       });
     });

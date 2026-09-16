@@ -4,7 +4,7 @@ import { createActor } from 'xstate';
 import { trace, type Tracer } from '@opentelemetry/api';
 import { withSpanAsyncV4 } from '@map-colonies/tracing-utils';
 import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
-import type { JobId } from 'jobnik-openapi';
+import type { JobId, StageId } from 'jobnik-openapi';
 import type { PrismaClient } from '@prismaClient';
 import { JobOperationStatus, Prisma, StageOperationStatus } from '@prismaClient';
 import { JobManager } from '@src/jobs/models/manager';
@@ -153,7 +153,7 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  public async getStageById(stageId: string, includeTasks?: boolean): Promise<StageModel> {
+  public async getStageById(stageId: StageId, includeTasks?: boolean): Promise<StageModel> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
@@ -200,7 +200,7 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  public async getSummaryByStageId(stageId: string): Promise<StageSummary> {
+  public async getSummaryByStageId(stageId: StageId): Promise<StageSummary> {
     trace.getActiveSpan()?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
     });
@@ -213,7 +213,7 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  public async updateUserMetadata(stageId: string, userMetadata: Record<string, unknown>): Promise<void> {
+  public async updateUserMetadata(stageId: StageId, userMetadata: Record<string, unknown>): Promise<void> {
     trace.getActiveSpan()?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
     });
@@ -238,7 +238,7 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  public async updateStatus(stageId: string, status: StageOperationStatus, tx?: PrismaTransaction): Promise<void> {
+  public async updateStatus(stageId: StageId, status: StageOperationStatus, tx?: PrismaTransaction): Promise<void> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
@@ -266,7 +266,7 @@ export class StageManager {
    */
   @withSpanAsyncV4
   public async getStageEntityById<T extends StageEntityOptions>(
-    stageId: string,
+    stageId: StageId,
     options: T = {} as T
   ): Promise<null | GetStageEntityByIdReturnType<T>> {
     trace.getActiveSpan()?.setAttributes({
@@ -295,7 +295,7 @@ export class StageManager {
    * @param summary summary object containing the current progress aggregated task data of the stage.
    */
   @withSpanAsyncV4
-  public async updateStageProgressFromTaskChanges(stageId: string, summaryUpdatePayload: UpdateSummaryCount, tx: PrismaTransaction): Promise<void> {
+  public async updateStageProgressFromTaskChanges(stageId: StageId, summaryUpdatePayload: UpdateSummaryCount, tx: PrismaTransaction): Promise<void> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
@@ -320,7 +320,7 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  private async executeUpdateStatus(stageId: string, targetStatus: StageOperationStatus, tx: PrismaTransaction): Promise<void> {
+  private async executeUpdateStatus(stageId: StageId, targetStatus: StageOperationStatus, tx: PrismaTransaction): Promise<void> {
     const stage = await this.getStageEntityById(stageId, { includeJob: true, tx });
 
     if (!stage) {
@@ -393,7 +393,7 @@ export class StageManager {
       });
 
       if (nextStage?.status === StageOperationStatus.CREATED) {
-        await this.executeUpdateStatus(nextStage.id, StageOperationStatus.PENDING, tx);
+        await this.executeUpdateStatus(nextStage.id as StageId, StageOperationStatus.PENDING, tx);
         trace.getActiveSpan()?.addEvent('Next stage set to PENDING', { nextStageId: nextStage.id });
       }
 
@@ -443,7 +443,7 @@ export class StageManager {
 
     await tx.stage.update({ where: { id: stage.id }, data: stageUpdatedData });
     if (summary.total === summary.completed) {
-      await this.updateStatus(stage.id, StageOperationStatus.COMPLETED, tx);
+      await this.updateStatus(stage.id as StageId, StageOperationStatus.COMPLETED, tx);
 
       this.logger.info({
         msg: 'Stage completed, updating job progress',
