@@ -1,8 +1,8 @@
 import { SpanKind, context, propagation, trace } from '@opentelemetry/api';
 import { StatusCodes } from 'http-status-codes';
 import { INFRA_JOBNIK_TASK_ATTEMPTS, INFRA_JOBNIK_TASK_STATUS } from '@map-colonies/semantic-conventions';
-import type { ApiClient } from '../api';
 import type { TaskId, components } from 'jobnik-openapi';
+import type { ApiClient } from '../api';
 import type { InferTaskData, Task } from '../types/task';
 import type { ValidStageType, StageTypesTemplate } from '../types/stage';
 import { DEFAULT_SPAN_CONTEXT, withSpan } from '../telemetry/trace';
