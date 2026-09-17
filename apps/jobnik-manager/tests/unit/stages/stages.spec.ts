@@ -6,6 +6,7 @@ import { faker } from '@faker-js/faker';
 import { trace } from '@opentelemetry/api';
 import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
 import type { JobId, StageId } from 'jobnik-openapi';
+import { JobInFiniteStateError } from 'jobnik-openapi';
 import type { PrismaClient } from '@prismaClient';
 import { Prisma, StageOperationStatus, JobOperationStatus } from '@prismaClient';
 import { StageManager } from '@src/stages/models/manager';
@@ -18,7 +19,6 @@ import { defaultStatusCounts } from '@src/stages/models/helper';
 import { StageRepository } from '@src/stages/DAL/stageRepository';
 import type { JobPrismaObject } from '@src/jobs/models/models';
 import { SERVICE_NAME } from '@src/common/constants';
-import { JobInFiniteStateError } from '@src/common/generated/errors';
 import {
   completedStageXstatePersistentSnapshot,
   inProgressStageXstatePersistentSnapshot,

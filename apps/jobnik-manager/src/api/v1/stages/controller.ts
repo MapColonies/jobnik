@@ -3,8 +3,8 @@ import httpStatus from 'http-status-codes';
 import { injectable, inject } from 'tsyringe';
 import { HttpError } from '@map-colonies/error-express-handler';
 import type { TypedRequestHandlers } from 'jobnik-openapi';
+import { IllegalStageStatusTransitionError, JobInFiniteStateError, JobNotFoundError, StageNotFoundError } from 'jobnik-openapi';
 import { SERVICES, successMessages } from '@common/constants';
-import { IllegalStageStatusTransitionError, JobInFiniteStateError, JobNotFoundError, StageNotFoundError } from '@src/common/generated/errors';
 import { StageManager } from '@src/stages/models/manager';
 import type { StageFindCriteriaArg } from '@src/stages/models/models';
 

@@ -19,13 +19,12 @@
     "prelint": "npm run format",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
-    "prebuild": "npm run clean && npm run copy:openapi",
+    "prebuild": "npm run clean && npm run copy:openapi && npm run copy:errors",
     "build": "tsc --project tsconfig.build.json && copyfiles -f src/openapi3.yaml dist",
     "start": "npm run build && cd dist && node ./index.js",
     "clean": "rimraf dist",
     "copy:openapi": "node scripts/copySpec.mts",
-    "generate:openapi": "node scripts/openapi.mts",
-    "generate:check": "npm run generate:openapi && git diff --exit-code -- src/generated/openapi-errors.ts",
+    "copy:errors": "node scripts/copyErrors.mts",
     "prepack": "npm run build",
     "type-check": "tsc --noEmit -p tsconfig.lint.json",
     "check-pack": "publint && attw --pack . && node scripts/checkPack.mts"
@@ -53,7 +52,6 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@map-colonies/eslint-config": "catalog:",
-    "@map-colonies/openapi-helpers": "catalog:",
     "@map-colonies/tsconfig": "catalog:",
     "@opentelemetry/context-async-hooks": "catalog:",
     "@opentelemetry/core": "catalog:",

@@ -6,6 +6,13 @@ import { withSpanAsyncV4 } from '@map-colonies/tracing-utils';
 import { subMinutes } from 'date-fns';
 import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
 import type { StageId, TaskId } from 'jobnik-openapi';
+import {
+  NotAllowedToAddTasksToInProgressStageError,
+  StageInFiniteStateError,
+  StageNotFoundError,
+  TaskNotFoundError,
+  TaskStatusUpdateFailedError,
+} from 'jobnik-openapi';
 import { Prisma, StageOperationStatus, Task, TaskOperationStatus, type PrismaClient } from '@prismaClient';
 import { SERVICES, XSTATE_DONE_STATE } from '@common/constants';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
@@ -17,13 +24,6 @@ import { stageStateMachine } from '@src/stages/models/stageStateMachine';
 import { type ConfigType } from '@src/common/config';
 import type { UpdateSummaryCount } from '@src/stages/models/models';
 import type { PrismaTransaction } from '@src/db/types';
-import {
-  NotAllowedToAddTasksToInProgressStageError,
-  StageInFiniteStateError,
-  StageNotFoundError,
-  TaskNotFoundError,
-  TaskStatusUpdateFailedError,
-} from '@src/common/generated/errors';
 import { ATTR_MESSAGING_DESTINATION_NAME, ATTR_MESSAGING_MESSAGE_ID } from '@src/common/semconv';
 import { paginate } from '@src/common/utils/pagination';
 import { TaskRepository } from '../DAL/taskRepository';

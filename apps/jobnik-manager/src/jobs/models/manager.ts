@@ -6,6 +6,7 @@ import { trace } from '@opentelemetry/api';
 import { withSpanAsyncV4 } from '@map-colonies/tracing-utils';
 import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
 import type { JobId } from 'jobnik-openapi';
+import { IllegalJobStatusTransitionError, JobNotInFiniteStateError, JobNotFoundError } from 'jobnik-openapi';
 import type { PrismaClient, Priority } from '@prismaClient';
 import { Prisma, JobOperationStatus } from '@prismaClient';
 import { SERVICES } from '@common/constants';
@@ -13,7 +14,6 @@ import { convertArrayPrismaStageToStageResponse } from '@src/stages/models/helpe
 import { illegalStatusTransitionErrorMessage, prismaKnownErrors } from '@common/errors';
 import { type PrismaTransaction } from '@src/db/types';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
-import { IllegalJobStatusTransitionError, JobNotInFiniteStateError, JobNotFoundError } from '@src/common/generated/errors';
 import { ATTR_MESSAGING_MESSAGE_CONVERSATION_ID } from '@src/common/semconv';
 import { paginate } from '@src/common/utils/pagination';
 import { errorMessages as jobsErrorMessages, SamePriorityChangeError } from './errors';

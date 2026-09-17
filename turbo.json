@@ -6,7 +6,7 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", "src/db/prisma/schema.prisma"],
-      "outputs": ["dist/**", "src/db/prisma/generated/**", "src/openapi3.yaml"],
+      "outputs": ["dist/**", "src/db/prisma/generated/**", "src/openapi3.yaml", "src/generated/openapi-errors.ts"],
       "outputLogs": "errors-only"
     },
     "build:docker": {

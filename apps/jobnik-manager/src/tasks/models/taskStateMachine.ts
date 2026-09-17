@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type { Snapshot } from 'xstate';
 import { createActor, setup } from 'xstate';
+import { IllegalTaskStatusTransitionError } from 'jobnik-openapi';
 import { TaskOperationStatus } from '@prismaClient';
-import { IllegalTaskStatusTransitionError } from '@src/common/generated/errors';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 
 type changeStatusOperations = 'pend' | 'complete' | 'retry' | 'process' | 'fail' | 'create';
