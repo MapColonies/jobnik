@@ -11,7 +11,7 @@ import {
   type RequestSender,
 } from '@map-colonies/openapi-helpers/requestSender';
 import { faker } from '@faker-js/faker';
-import { openapiFilePath, type paths, type operations } from 'jobnik-openapi';
+import { openapiFilePath, type paths, type operations, type JobId, type StageId } from 'jobnik-openapi';
 import { JobOperationStatus, StageOperationStatus, TaskOperationStatus, type PrismaClient } from '@prismaClient';
 import type { PrismaTransaction } from '@src/db/types';
 import { getApp } from '@src/app';
@@ -82,7 +82,7 @@ describe('stage', function () {
         });
         const jobId = job.id;
 
-        const response = await requestSender.getStagesV1({ queryParams: { job_id: jobId } });
+        const response = await requestSender.getStagesV1({ queryParams: { job_id: jobId as JobId } });
 
         expect(response).toMatchObject({
           status: StatusCodes.OK,
@@ -102,7 +102,7 @@ describe('stage', function () {
       });
 
       it('should return 200 status code and empty array', async function () {
-        const response = await requestSender.getStagesV1({ queryParams: { job_id: faker.string.uuid() } });
+        const response = await requestSender.getStagesV1({ queryParams: { job_id: faker.string.uuid() as JobId } });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -169,7 +169,7 @@ describe('stage', function () {
 
         const jobId = job.id;
 
-        const response = await requestSender.getStagesV1({ queryParams: { job_id: jobId, should_return_tasks: true } });
+        const response = await requestSender.getStagesV1({ queryParams: { job_id: jobId as JobId, should_return_tasks: true } });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -197,7 +197,7 @@ describe('stage', function () {
           [{}]
         );
 
-        const response = await requestSender.getStagesV1({ queryParams: { job_id: job.id, should_return_tasks: false } });
+        const response = await requestSender.getStagesV1({ queryParams: { job_id: job.id as JobId, should_return_tasks: false } });
 
         expectResponseStatus(response, 200);
 
@@ -276,7 +276,7 @@ describe('stage', function () {
         );
 
         const getStageResponse = await requestSender.getStageByIdV1({
-          pathParams: { stageId: stage.id },
+          pathParams: { stageId: stage.id as StageId },
           queryParams: { should_return_tasks: undefined },
         });
 
@@ -294,7 +294,7 @@ describe('stage', function () {
         ]);
 
         const getStageResponse = await requestSender.getStageByIdV1({
-          pathParams: { stageId: stage.id },
+          pathParams: { stageId: stage.id as StageId },
           queryParams: { should_return_tasks: true },
         });
 
@@ -310,7 +310,7 @@ describe('stage', function () {
         ]);
 
         const getStageResponse = await requestSender.getStageByIdV1({
-          pathParams: { stageId: stage.id },
+          pathParams: { stageId: stage.id as StageId },
           queryParams: { should_return_tasks: false },
         });
 
@@ -322,7 +322,7 @@ describe('stage', function () {
 
     describe('Bad Path', function () {
       it('should return a 404 status code with a validation error message if the requested stage does not exist', async function () {
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: faker.string.uuid() } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: faker.string.uuid() as StageId } });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({
@@ -332,7 +332,7 @@ describe('stage', function () {
       });
 
       it('should return status code 400 when supplying bad uuid as part of the request', async function () {
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: 'someInvalidJobId' } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: 'someInvalidJobId' as StageId } });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({
@@ -348,7 +348,7 @@ describe('stage', function () {
         const findUniqueSpy = createProxyMock(prisma.stage, 'findUnique');
         findUniqueSpy.mockRejectedValueOnce(error);
 
-        const response = await requestSender.getStageByIdV1({ pathParams: { stageId: dumpUuid } });
+        const response = await requestSender.getStageByIdV1({ pathParams: { stageId: dumpUuid as StageId } });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -362,7 +362,7 @@ describe('stage', function () {
         const findUniqueSpy = createProxyMock(prisma.stage, 'findUnique');
         findUniqueSpy.mockRejectedValueOnce(error);
 
-        const response = await requestSender.getStageByIdV1({ pathParams: { stageId: dumpUuid } });
+        const response = await requestSender.getStageByIdV1({ pathParams: { stageId: dumpUuid as StageId } });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -378,7 +378,7 @@ describe('stage', function () {
       it('should return 200 status code and return the stages', async function () {
         const { stage, job } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
 
-        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: job.id } });
+        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: job.id as JobId } });
 
         expectResponseStatus(getStageResponse, 200);
 
@@ -393,7 +393,7 @@ describe('stage', function () {
         ]);
 
         const getStageResponse = await requestSender.getStagesByJobIdV1({
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
           queryParams: { should_return_tasks: true },
         });
 
@@ -411,7 +411,7 @@ describe('stage', function () {
         ]);
 
         const getStageResponse = await requestSender.getStagesByJobIdV1({
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
           queryParams: { should_return_tasks: false },
         });
 
@@ -425,7 +425,7 @@ describe('stage', function () {
       it('should return a 200 status code with empty array object if no stages exists for the requested job', async function () {
         const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
 
-        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: job.id } });
+        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: job.id as JobId } });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({
@@ -440,7 +440,7 @@ describe('stage', function () {
 
         // Create multiple stages for the same job using API endpoints to ensure proper order assignment
         await requestSender.addStageV1({
-          pathParams: { jobId: createdJobId },
+          pathParams: { jobId: createdJobId as JobId },
           requestBody: {
             type: 'FIRST_STAGE',
             data: {},
@@ -449,7 +449,7 @@ describe('stage', function () {
         });
 
         await requestSender.addStageV1({
-          pathParams: { jobId: createdJobId },
+          pathParams: { jobId: createdJobId as JobId },
           requestBody: {
             type: 'SECOND_STAGE',
             data: {},
@@ -458,7 +458,7 @@ describe('stage', function () {
         });
 
         await requestSender.addStageV1({
-          pathParams: { jobId: createdJobId },
+          pathParams: { jobId: createdJobId as JobId },
           requestBody: {
             type: 'THIRD_STAGE',
             data: {},
@@ -466,7 +466,7 @@ describe('stage', function () {
           },
         });
 
-        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: createdJobId } });
+        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: createdJobId as JobId } });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({
@@ -482,7 +482,7 @@ describe('stage', function () {
 
     describe('Bad Path', function () {
       it('should return status code 400 when supplying bad uuid', async function () {
-        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: 'someInvalidJobId' } });
+        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: 'someInvalidJobId' as JobId } });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({
@@ -492,7 +492,7 @@ describe('stage', function () {
       });
 
       it('should return status code 404 when a job with the given uuid does not exists', async function () {
-        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: faker.string.uuid() } });
+        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: faker.string.uuid() as JobId } });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({
@@ -508,7 +508,7 @@ describe('stage', function () {
         const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
         findUniqueSpy.mockRejectedValueOnce(error);
 
-        const response = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: faker.string.uuid() } });
+        const response = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: faker.string.uuid() as JobId } });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -522,7 +522,7 @@ describe('stage', function () {
         const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
         findUniqueSpy.mockRejectedValueOnce(error);
 
-        const response = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: faker.string.uuid() } });
+        const response = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: faker.string.uuid() as JobId } });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -538,7 +538,7 @@ describe('stage', function () {
       it("should return 200 status code and return the stage's summary", async function () {
         const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
 
-        const getStageResponse = await requestSender.getStageSummaryV1({ pathParams: { stageId: stage.id } });
+        const getStageResponse = await requestSender.getStageSummaryV1({ pathParams: { stageId: stage.id as StageId } });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({ status: StatusCodes.OK, body: defaultStatusCounts });
@@ -547,7 +547,7 @@ describe('stage', function () {
 
     describe('Bad Path', function () {
       it("should return a 404 status code and a validation error indicating the stage's non-existence should be returned", async function () {
-        const getStageResponse = await requestSender.getStageSummaryV1({ pathParams: { stageId: dumpUuid } });
+        const getStageResponse = await requestSender.getStageSummaryV1({ pathParams: { stageId: dumpUuid as StageId } });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({
@@ -557,7 +557,7 @@ describe('stage', function () {
       });
 
       it('should return status code 400 when supplying bad uuid as part of the request', async function () {
-        const getStageResponse = await requestSender.getStageSummaryV1({ pathParams: { stageId: 'someInvalidJobId' } });
+        const getStageResponse = await requestSender.getStageSummaryV1({ pathParams: { stageId: 'someInvalidJobId' as StageId } });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({
@@ -573,7 +573,7 @@ describe('stage', function () {
         const findUniqueSpy = createProxyMock(prisma.stage, 'findUnique');
         findUniqueSpy.mockRejectedValueOnce(error);
 
-        const response = await requestSender.getStageSummaryV1({ pathParams: { stageId: dumpUuid } });
+        const response = await requestSender.getStageSummaryV1({ pathParams: { stageId: dumpUuid as StageId } });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -587,7 +587,7 @@ describe('stage', function () {
         const findUniqueSpy = createProxyMock(prisma.stage, 'findUnique');
         findUniqueSpy.mockRejectedValueOnce(error);
 
-        const response = await requestSender.getStageSummaryV1({ pathParams: { stageId: dumpUuid } });
+        const response = await requestSender.getStageSummaryV1({ pathParams: { stageId: dumpUuid as StageId } });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -606,11 +606,11 @@ describe('stage', function () {
         const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
 
         const updateUserMetadataResponse = await requestSender.updateStageUserMetadataV1({
-          pathParams: { stageId: stage.id },
+          pathParams: { stageId: stage.id as StageId },
           requestBody: userMetadataInput,
         });
 
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id as StageId } });
 
         expect(updateUserMetadataResponse).toSatisfyApiSpec();
         expect(getStageResponse.body).toMatchObject({ userMetadata: userMetadataInput });
@@ -619,7 +619,10 @@ describe('stage', function () {
 
     describe('Bad Path', function () {
       it('should return a 404 status code along with a message that specifies that a stage with the given id was not found', async function () {
-        const getStageResponse = await requestSender.updateStageUserMetadataV1({ pathParams: { stageId: dumpUuid }, requestBody: { avi: 'avi' } });
+        const getStageResponse = await requestSender.updateStageUserMetadataV1({
+          pathParams: { stageId: dumpUuid as StageId },
+          requestBody: { avi: 'avi' },
+        });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({
@@ -632,7 +635,7 @@ describe('stage', function () {
         const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
 
         const response = await requestSender.updateStageUserMetadataV1({
-          pathParams: { stageId: stage.id },
+          pathParams: { stageId: stage.id as StageId },
           requestBody: 'badInputString' as unknown as { [key: string]: string },
         });
 
@@ -650,7 +653,7 @@ describe('stage', function () {
         const updateSpy = createProxyMock(prisma.stage, 'update');
         updateSpy.mockRejectedValueOnce(error);
 
-        const response = await requestSender.updateStageUserMetadataV1({ pathParams: { stageId: faker.string.uuid() }, requestBody: {} });
+        const response = await requestSender.updateStageUserMetadataV1({ pathParams: { stageId: faker.string.uuid() as StageId }, requestBody: {} });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -664,7 +667,7 @@ describe('stage', function () {
         const updateSpy = createProxyMock(prisma.stage, 'update');
         updateSpy.mockRejectedValueOnce(error);
 
-        const response = await requestSender.updateStageUserMetadataV1({ pathParams: { stageId: faker.string.uuid() }, requestBody: {} });
+        const response = await requestSender.updateStageUserMetadataV1({ pathParams: { stageId: faker.string.uuid() as StageId }, requestBody: {} });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -688,7 +691,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -710,7 +713,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -732,7 +735,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -757,7 +760,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -778,7 +781,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagePayload,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -804,7 +807,7 @@ describe('stage', function () {
 
         const stage1Response = await requestSender.addStageV1({
           requestBody: stage1Payload,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(stage1Response).toMatchObject({
@@ -823,7 +826,7 @@ describe('stage', function () {
 
         const stage2Response = await requestSender.addStageV1({
           requestBody: stage2Payload,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(stage2Response).toMatchObject({
@@ -842,7 +845,7 @@ describe('stage', function () {
 
         const stage3Response = await requestSender.addStageV1({
           requestBody: stage3Payload,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(stage3Response).toMatchObject({
@@ -880,17 +883,17 @@ describe('stage', function () {
         // Create stages
         const job1Stage1Response = await requestSender.addStageV1({
           requestBody: job1Stage1Payload,
-          pathParams: { jobId: job1.id },
+          pathParams: { jobId: job1.id as JobId },
         });
 
         const job1Stage2Response = await requestSender.addStageV1({
           requestBody: job1Stage2Payload,
-          pathParams: { jobId: job1.id },
+          pathParams: { jobId: job1.id as JobId },
         });
 
         const job2Stage1Response = await requestSender.addStageV1({
           requestBody: job2Stage1Payload,
-          pathParams: { jobId: job2.id },
+          pathParams: { jobId: job2.id as JobId },
         });
 
         expect(job1Stage1Response).toMatchObject({
@@ -931,13 +934,13 @@ describe('stage', function () {
               ...stageData,
               userMetadata: {},
             } satisfies StageCreateModel,
-            pathParams: { jobId: job.id },
+            pathParams: { jobId: job.id as JobId },
           });
         }
 
         // Fetch all stages for the job
         const getStagesResponse = await requestSender.getStagesByJobIdV1({
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(getStagesResponse).toMatchObject({
@@ -957,7 +960,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         await memoryExporter.forceFlush();
@@ -984,7 +987,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -1010,7 +1013,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -1036,7 +1039,7 @@ describe('stage', function () {
             data: {},
             userMetadata: {},
           } satisfies StageCreateModel,
-          pathParams: { jobId: 'someInvalidJobId' },
+          pathParams: { jobId: 'someInvalidJobId' as JobId },
         });
 
         expect(addStageResponse).toMatchObject({
@@ -1049,7 +1052,7 @@ describe('stage', function () {
         const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
 
         const addStageResponse = await requestSender.addStageV1({
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
           requestBody: {} as unknown as StageCreateModel,
         });
 
@@ -1067,7 +1070,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: { data: {}, userMetadata: {}, type: 'SOME_STAGE_TYPE' } satisfies StageCreateModel,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -1089,7 +1092,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id },
+          pathParams: { jobId: job.id as JobId },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -1108,7 +1111,7 @@ describe('stage', function () {
 
         const response = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: testJobId },
+          pathParams: { jobId: testJobId as JobId },
         });
 
         expect(response).toSatisfyApiSpec();
@@ -1127,7 +1130,7 @@ describe('stage', function () {
 
         const response = await requestSender.addStageV1({
           requestBody: { data: {}, type: 'SOME_STAGE_TYPE', userMetadata: {} },
-          pathParams: { jobId: testJobId },
+          pathParams: { jobId: testJobId as JobId },
         });
 
         expect(response).toSatisfyApiSpec();
@@ -1144,7 +1147,7 @@ describe('stage', function () {
 
         const response = await requestSender.addStageV1({
           requestBody: { data: {}, type: 'SOME_STAGE_TYPE', userMetadata: {} },
-          pathParams: { jobId: testJobId },
+          pathParams: { jobId: testJobId as JobId },
         });
 
         expect(response).toSatisfyApiSpec();
@@ -1162,14 +1165,14 @@ describe('stage', function () {
         const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
 
         const setStatusResponse = await requestSender.updateStageStatusV1({
-          pathParams: { stageId: stage.id },
+          pathParams: { stageId: stage.id as StageId },
           requestBody: { status: StageOperationStatus.PENDING },
         });
 
         expect(setStatusResponse).toSatisfyApiSpec();
         expect(setStatusResponse).toHaveProperty('status', StatusCodes.OK);
 
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id as StageId } });
 
         expect(getStageResponse).toHaveProperty('body.status', StageOperationStatus.PENDING);
       });
@@ -1177,7 +1180,7 @@ describe('stage', function () {
       it("should return 201 status code and modify stages's status by order (stage is first ordered before other)", async function () {
         const { stage: stage1 } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
         const secondStageResponse = await requestSender.addStageV1({
-          pathParams: { jobId: stage1.jobId },
+          pathParams: { jobId: stage1.jobId as JobId },
           requestBody: { type: 'SECOND_STAGE', data: {}, userMetadata: {} },
         });
 
@@ -1188,14 +1191,14 @@ describe('stage', function () {
         expect(stage2).toHaveProperty('order', 2);
 
         const setStatusResponse = await requestSender.updateStageStatusV1({
-          pathParams: { stageId: stage1.id },
+          pathParams: { stageId: stage1.id as StageId },
           requestBody: { status: StageOperationStatus.PENDING },
         });
 
         expect(setStatusResponse).toSatisfyApiSpec();
         expect(setStatusResponse).toHaveProperty('status', StatusCodes.OK);
 
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage1.id } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage1.id as StageId } });
 
         expect(getStageResponse).toHaveProperty('body.status', StageOperationStatus.PENDING);
       });
@@ -1228,7 +1231,7 @@ describe('stage', function () {
         const stageId = stage.id;
 
         const updateStageResponse = await requestSender.updateStageStatusV1({
-          pathParams: { stageId },
+          pathParams: { stageId: stageId as StageId },
           requestBody: { status: StageOperationStatus.PENDING },
         });
 
@@ -1248,7 +1251,7 @@ describe('stage', function () {
         const stageId = stage.id;
 
         const updateStageResponse = await requestSender.updateStageStatusV1({
-          pathParams: { stageId },
+          pathParams: { stageId: stageId as StageId },
           requestBody: { status: StageOperationStatus.COMPLETED as unknown as 'PENDING' },
         });
 
@@ -1266,7 +1269,7 @@ describe('stage', function () {
         const { stage: stage1 } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
 
         const secondStageResponse = await requestSender.addStageV1({
-          pathParams: { jobId: stage1.jobId },
+          pathParams: { jobId: stage1.jobId as JobId },
           requestBody: { type: 'SECOND_STAGE', data: {}, userMetadata: {} },
         });
 
@@ -1289,7 +1292,7 @@ describe('stage', function () {
 
       it('should return 404 with specific error message for non-existent stage', async function () {
         const updateStageResponse = await requestSender.updateStageStatusV1({
-          pathParams: { stageId: testStageId },
+          pathParams: { stageId: testStageId as StageId },
           requestBody: { status: StageOperationStatus.PENDING },
         });
 
@@ -1315,7 +1318,7 @@ describe('stage', function () {
         });
 
         const response = await requestSender.updateStageStatusV1({
-          pathParams: { stageId: testStageId },
+          pathParams: { stageId: testStageId as StageId },
           requestBody: { status: StageOperationStatus.PENDING },
         });
 
@@ -1341,7 +1344,7 @@ describe('stage', function () {
         });
 
         const response = await requestSender.updateStageStatusV1({
-          pathParams: { stageId: testStageId },
+          pathParams: { stageId: testStageId as StageId },
           requestBody: { status: StageOperationStatus.PENDING },
         });
 

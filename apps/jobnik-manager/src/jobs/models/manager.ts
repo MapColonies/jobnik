@@ -5,6 +5,8 @@ import type { Tracer } from '@opentelemetry/api';
 import { trace } from '@opentelemetry/api';
 import { withSpanAsyncV4 } from '@map-colonies/tracing-utils';
 import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
+import type { JobId } from 'jobnik-openapi';
+import { IllegalJobStatusTransitionError, JobNotInFiniteStateError, JobNotFoundError } from 'jobnik-openapi';
 import type { PrismaClient, Priority } from '@prismaClient';
 import { Prisma, JobOperationStatus } from '@prismaClient';
 import { SERVICES } from '@common/constants';
@@ -12,7 +14,6 @@ import { convertArrayPrismaStageToStageResponse } from '@src/stages/models/helpe
 import { illegalStatusTransitionErrorMessage, prismaKnownErrors } from '@common/errors';
 import { type PrismaTransaction } from '@src/db/types';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
-import { IllegalJobStatusTransitionError, JobNotInFiniteStateError, JobNotFoundError } from '@src/common/generated/errors';
 import { ATTR_MESSAGING_MESSAGE_CONVERSATION_ID } from '@src/common/semconv';
 import { paginate } from '@src/common/utils/pagination';
 import { errorMessages as jobsErrorMessages, SamePriorityChangeError } from './errors';
@@ -88,7 +89,7 @@ export class JobManager {
   }
 
   @withSpanAsyncV4
-  public async getJobById(jobId: string, includeStages?: boolean): Promise<JobModel> {
+  public async getJobById(jobId: JobId, includeStages?: boolean): Promise<JobModel> {
     trace.getActiveSpan()?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
     });
@@ -103,7 +104,7 @@ export class JobManager {
   }
 
   @withSpanAsyncV4
-  public async updateUserMetadata(jobId: string, userMetadata: Record<string, unknown>): Promise<void> {
+  public async updateUserMetadata(jobId: JobId, userMetadata: Record<string, unknown>): Promise<void> {
     trace.getActiveSpan()?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
     });
@@ -128,7 +129,7 @@ export class JobManager {
   }
 
   @withSpanAsyncV4
-  public async updatePriority(jobId: string, priority: Priority): Promise<void> {
+  public async updatePriority(jobId: JobId, priority: Priority): Promise<void> {
     trace.getActiveSpan()?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
       [INFRA_CONVENTIONS.infra.jobnik.job.priority]: priority,
@@ -157,7 +158,7 @@ export class JobManager {
   }
 
   @withSpanAsyncV4
-  public async updateStatus(jobId: string, status: JobOperationStatus, tx?: PrismaTransaction): Promise<void> {
+  public async updateStatus(jobId: JobId, status: JobOperationStatus, tx?: PrismaTransaction): Promise<void> {
     trace.getActiveSpan()?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
       [INFRA_CONVENTIONS.infra.jobnik.job.status]: status,
@@ -173,7 +174,7 @@ export class JobManager {
   }
 
   @withSpanAsyncV4
-  public async deleteJob(jobId: string): Promise<void> {
+  public async deleteJob(jobId: JobId): Promise<void> {
     trace.getActiveSpan()?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
     });
@@ -207,7 +208,7 @@ export class JobManager {
    */
   @withSpanAsyncV4
   public async getJobEntityById<IncludeStages extends boolean = false>(
-    jobId: string,
+    jobId: JobId,
     options: { includeStages?: IncludeStages; tx?: PrismaTransaction } = {}
   ): Promise<JobPrismaObject<IncludeStages> | null> {
     const spanActive = trace.getActiveSpan();
@@ -229,7 +230,7 @@ export class JobManager {
   }
 
   @withSpanAsyncV4
-  private async executeUpdateStatus(jobId: string, status: JobOperationStatus, tx: PrismaTransaction): Promise<void> {
+  private async executeUpdateStatus(jobId: JobId, status: JobOperationStatus, tx: PrismaTransaction): Promise<void> {
     const job = await this.getJobEntityById(jobId, { tx });
 
     if (!job) {
@@ -279,6 +280,6 @@ export class JobManager {
       stages: Array.isArray(stage) ? convertArrayPrismaStageToStageResponse(stage) : undefined,
     };
 
-    return Object.assign(rest, transformedFields);
+    return Object.assign(rest, transformedFields) as unknown as JobModel;
   }
 }

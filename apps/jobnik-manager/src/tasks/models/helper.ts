@@ -21,7 +21,7 @@ export function convertPrismaToTaskResponse(prismaObjects: Prisma.TaskGetPayload
     endTime: endTime ? endTime.toISOString() : undefined,
   };
 
-  return Object.assign(rest, transformedFields);
+  return Object.assign(rest, transformedFields) as TaskModel;
 }
 
 /**

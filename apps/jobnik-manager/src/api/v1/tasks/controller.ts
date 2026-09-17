@@ -3,7 +3,6 @@ import httpStatus from 'http-status-codes';
 import { injectable, inject } from 'tsyringe';
 import { HttpError } from '@map-colonies/error-express-handler';
 import type { TypedRequestHandlers } from 'jobnik-openapi';
-import { SERVICES, successMessages } from '@common/constants';
 import {
   IllegalJobStatusTransitionError,
   IllegalStageStatusTransitionError,
@@ -14,7 +13,8 @@ import {
   StageNotFoundError,
   TaskStatusUpdateFailedError,
   TaskNotFoundError,
-} from '@src/common/generated/errors';
+} from 'jobnik-openapi';
+import { SERVICES, successMessages } from '@common/constants';
 import { TaskManager } from '@src/tasks/models/manager';
 import { type TasksFindCriteriaArg } from '@src/tasks/models/models';
 

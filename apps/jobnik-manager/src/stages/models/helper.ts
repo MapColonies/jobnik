@@ -39,7 +39,7 @@ function convertPrismaToStageResponse(prismaObjects: StagePrismaObject): StageMo
     tasks: Array.isArray(task) ? convertArrayPrismaTaskToTaskResponse(task) : undefined,
     tracestate: tracestate ?? undefined,
   };
-  return Object.assign(rest, transformedFields);
+  return Object.assign(rest, transformedFields) as StageModel;
 }
 
 /**

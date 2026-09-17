@@ -1,8 +1,7 @@
 import { type Span, SpanKind, SpanStatusCode, context, propagation, trace } from '@opentelemetry/api';
 import { INFRA_JOBNIK_JOB_NAME, INFRA_JOBNIK_JOB_PRIORITY, INFRA_JOBNIK_STAGE_ID } from '@map-colonies/semantic-conventions';
+import type { components, JobId, StageId } from 'jobnik-openapi';
 import type { ApiClient } from '../api';
-import type { components } from '../types/openapi';
-import type { JobId, StageId } from '../types/brands';
 import type { Job, JobData, JobTypesTemplate, NewJob, ValidJobType } from '../types/job';
 import type { InferStageData, NewStage, Stage, StageData, StageTypesTemplate, ValidStageType } from '../types/stage';
 import type { InferTaskData, NewTask, Task } from '../types/task';

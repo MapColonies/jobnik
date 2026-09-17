@@ -3,7 +3,7 @@
   "workspaces": {
     "apps/jobnik-manager": {
       "entry": ["src/instrumentation.mts"],
-      "ignore": ["src/db/prisma/generated/**", "src/common/generated/**"],
+      "ignore": ["src/db/prisma/generated/**"],
       "ignoreUnresolved": ["./instrumentation.mjs"],
       "ignoreDependencies": ["@types/express-serve-static-core", "@types/multer", "@types/swagger-ui-express", "@prismaClient"]
     },
