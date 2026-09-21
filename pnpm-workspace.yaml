@@ -29,4 +29,4 @@ catalog:
   '@opentelemetry/core': ^2.11.0
   '@opentelemetry/context-async-hooks': ^2.11.0
   typescript: ^5.9.3
-  prettier: ^3.9.6
+  prettier: ^3.9.8
