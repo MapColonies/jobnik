@@ -8,7 +8,7 @@ await generateTypes(OPENAPI_PATH, TYPES_DESTINATION_PATH, {
   addTypedRequestHandler: true,
   shouldFormat: true,
   inject: 'import type { JobId, StageId, TaskId } from "./brands";',
-  transform(schemaObject, metadata) {
+  transform(_schemaObject, metadata) {
     if (metadata.path === '#/components/schemas/taskId') {
       return factory.createTypeReferenceNode('TaskId', undefined);
     }
