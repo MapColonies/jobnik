@@ -5,12 +5,11 @@
       "entry": ["src/instrumentation.mts"],
       "ignore": ["src/db/prisma/generated/**"],
       "ignoreUnresolved": ["./instrumentation.mjs"],
-      "ignoreDependencies": ["@types/express-serve-static-core", "@types/multer", "@types/swagger-ui-express", "@prismaClient"]
+      "ignoreDependencies": ["@types/express-serve-static-core", "@types/multer", "@types/swagger-ui-express"]
     },
     "packages/jobnik-openapi": {},
     "packages/jobnik-sdk": {
-      "entry": ["tests/**/*.test-d.ts"],
-      "ignoreUnresolved": ["../generated/openapi-errors"]
+      "entry": ["tests/**/*.test-d.ts"]
     },
     "e2e": {
       "ignoreDependencies": ["jobnik-manager"]
