@@ -78,7 +78,7 @@ describe('JobManager', () => {
         });
 
         it('should return array with single stage formatted object by criteria with related tasks', async function () {
-          const stageId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
           const taskEntity = createTaskEntity({ stageId });
           const stageEntity = createStageEntity({ id: stageId, task: [taskEntity], type: 'SOME_STAGE_TYPE' });
           prisma.stage.findMany.mockResolvedValue([stageEntity]);
@@ -138,13 +138,13 @@ describe('JobManager', () => {
         });
 
         it('should return stage object by provided id with related tasks', async function () {
-          const stageId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
           const taskEntity = createTaskEntity({ stageId });
           const stageEntity = createStageEntity({ id: stageId, task: [taskEntity] });
 
           prisma.stage.findUnique.mockResolvedValue(stageEntity);
 
-          const stage = await stageManager.getStageById(stageId as StageId);
+          const stage = await stageManager.getStageById(stageId);
 
           const { xstate, task, tracestate, ...rest } = stageEntity;
 
@@ -188,7 +188,7 @@ describe('JobManager', () => {
         });
 
         it('should return stage object by provided job id with related tasks', async function () {
-          const stageId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
           const taskEntity = createTaskEntity({ stageId });
           const stageEntity = createStageEntity({ id: stageId, task: [taskEntity] });
 

@@ -13,7 +13,7 @@ import {
   TaskNotFoundError,
   TaskStatusUpdateFailedError,
 } from 'jobnik-openapi';
-import { Prisma, StageOperationStatus, Task, TaskOperationStatus, type PrismaClient } from '@prismaClient';
+import { Prisma, StageOperationStatus, TaskOperationStatus, type PrismaClient } from '@prismaClient';
 import { SERVICES, XSTATE_DONE_STATE } from '@common/constants';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
 import { StageManager } from '@src/stages/models/manager';
@@ -260,8 +260,10 @@ export class TaskManager {
       },
     };
 
+    // TODO: cast here, not at usage, because Prisma has no concept of branded scalars
+    // (see TaskPrismaObject in models.ts for why); revisit once that's fixed upstream.
     const task = await prisma.task.findUnique(queryBody);
-    return task;
+    return task as TaskPrismaObject | null;
   }
 
   /**
@@ -280,7 +282,9 @@ export class TaskManager {
       const cutoffTime = subMinutes(new Date(), staleTaskThresholdInMinutes);
 
       // Find tasks that are stuck in IN_PROGRESS state beyond the time threshold
-      const staleTasks = await this.prisma.task.findMany({
+      // TODO: cast here, not at usage, because Prisma has no concept of branded scalars
+      // (see TaskPrismaObject in models.ts for why); revisit once that's fixed upstream.
+      const staleTasks = (await this.prisma.task.findMany({
         where: {
           status: TaskOperationStatus.IN_PROGRESS,
           startTime: {
@@ -292,7 +296,7 @@ export class TaskManager {
           stageId: true,
           startTime: true,
         },
-      });
+      })) as Pick<TaskPrismaObject, 'id' | 'stageId' | 'startTime'>[];
 
       if (staleTasks.length === 0) {
         this.logger.debug({ msg: 'No stale tasks found for cleanup' });
@@ -425,11 +429,13 @@ export class TaskManager {
 
     // Create update query with race condition protection for IN_PROGRESS
     const updateQueryBody = {
-      where: this.createUpdateWhereClause(task.id as TaskId, previousStatus),
+      where: this.createUpdateWhereClause(task.id, previousStatus),
       data: { ...taskDataToUpdate, status: nextStatus, xstate: newPersistedSnapshot, startTime, endTime },
     };
 
-    const updatedTasks = await tx.task.updateManyAndReturn(updateQueryBody);
+    // TODO: cast here, not at usage below, because Prisma has no concept of branded scalars
+    // (see TaskPrismaObject in models.ts for why); revisit once that's fixed upstream.
+    const updatedTasks = (await tx.task.updateManyAndReturn(updateQueryBody)) as TaskPrismaObject[];
     if (updatedTasks[0] === undefined) {
       // Race condition detected: another process already modified this task
       this.logger.warn({
@@ -443,13 +449,13 @@ export class TaskManager {
       throw new TaskStatusUpdateFailedError(tasksErrorMessages.taskStatusUpdateFailed);
     }
 
-    await this.updateStageSummary(task.stageId as StageId, previousStatus, nextStatus, tx);
+    await this.updateStageSummary(task.stageId, previousStatus, nextStatus, tx);
 
     // TODO - Check if this stage type should propagate failure to parent job
     // For now, all task failures cause stage failure, but in future versions
     // some stages may be configured as optional (non-blocking)
     if (nextStatus === TaskOperationStatus.FAILED) {
-      const stage = await this.stageManager.getStageEntityById(task.stageId as StageId, { tx });
+      const stage = await this.stageManager.getStageEntityById(task.stageId, { tx });
 
       /* v8 ignore next 7 -- @preserve */
       if (!stage) {
@@ -467,7 +473,7 @@ export class TaskManager {
         stageId: task.stageId,
       });
 
-      await this.stageManager.updateStatus(task.stageId as StageId, StageOperationStatus.FAILED, tx);
+      await this.stageManager.updateStatus(task.stageId, StageOperationStatus.FAILED, tx);
       trace.getActiveSpan()?.addEvent('Stage set to FAILED', { stageId: task.stageId });
     }
 
@@ -534,7 +540,7 @@ export class TaskManager {
    * @param staleTasks - Array of stale task objects
    * @returns Object containing success and failure counts
    */
-  private async updateStaleTasksStatus(staleTasks: Pick<Task, 'id' | 'stageId' | 'startTime'>[]): Promise<{
+  private async updateStaleTasksStatus(staleTasks: Pick<TaskPrismaObject, 'id' | 'stageId' | 'startTime'>[]): Promise<{
     successCount: number;
     failureCount: number;
   }> {
@@ -544,7 +550,7 @@ export class TaskManager {
     // Process tasks sequentially to avoid overwhelming the database
     for (const task of staleTasks) {
       try {
-        await this.updateStatus(task.id as TaskId, TaskOperationStatus.FAILED);
+        await this.updateStatus(task.id, TaskOperationStatus.FAILED);
         successCount++;
 
         this.logger.debug({

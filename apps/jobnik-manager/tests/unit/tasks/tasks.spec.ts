@@ -144,7 +144,7 @@ describe('JobManager', () => {
           const taskId = taskEntity.id;
           prisma.task.findUnique.mockResolvedValue(taskEntity);
 
-          const task = await taskManager.getTaskById(taskId as TaskId);
+          const task = await taskManager.getTaskById(taskId);
 
           const { creationTime, updateTime, xstate, startTime, endTime, ...rest } = taskEntity;
           const expectedTask = { ...rest, tracestate: undefined, creationTime: creationTime.toISOString(), updateTime: updateTime.toISOString() };
@@ -174,7 +174,7 @@ describe('JobManager', () => {
       describe('#HappyPath', () => {
         it('should return task object by provided stage id', async function () {
           const stageEntity = createStageEntity({});
-          const taskEntity = createTaskEntity({ stageId: stageEntity.id });
+          const taskEntity = createTaskEntity({ stageId: stageEntity.id as StageId });
           prisma.stage.findUnique.mockResolvedValue(stageEntity);
           prisma.task.findMany.mockResolvedValue([taskEntity]);
           prisma.task.count.mockResolvedValue(1);
@@ -213,7 +213,7 @@ describe('JobManager', () => {
 
           prisma.task.update.mockResolvedValue(taskEntity);
 
-          await expect(taskManager.updateUserMetadata(taskEntity.id as TaskId, { newData: 'test' })).toResolve();
+          await expect(taskManager.updateUserMetadata(taskEntity.id, { newData: 'test' })).toResolve();
         });
       });
 
@@ -240,10 +240,10 @@ describe('JobManager', () => {
       describe('#HappyPath', () => {
         it("should add new tasks to existing stage's tasks", async function () {
           const jobId = faker.string.uuid();
-          const stageId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
           const jobEntity = createJobEntity({ id: jobId });
           const stageEntity = createStageEntity({ jobId: jobEntity.id, id: stageId });
-          const taskEntity = createTaskEntity({ stageId: stageId, id: faker.string.uuid(), userMetadata: {} });
+          const taskEntity = createTaskEntity({ stageId: stageId, id: faker.string.uuid() as TaskId, userMetadata: {} });
 
           prisma.stage.findUnique.mockResolvedValue(stageEntity);
           prisma.job.findUnique.mockResolvedValue(jobEntity);
@@ -265,7 +265,7 @@ describe('JobManager', () => {
             userMetadata: { someData: '123' },
           } satisfies TaskCreateModel;
 
-          const tasksResponse = await taskManager.addTasks(stageId as StageId, [taskPayload]);
+          const tasksResponse = await taskManager.addTasks(stageId, [taskPayload]);
 
           // Extract unnecessary fields from the job object and assemble the expected result
           const { creationTime, updateTime, xstate, startTime, endTime, ...rest } = taskEntity;
@@ -285,7 +285,7 @@ describe('JobManager', () => {
 
         it('should reject adding tasks to job with IN_PROGRESS stage', async function () {
           const jobId = faker.string.uuid();
-          const stageId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
 
           const stageEntity = createStageEntity({
             jobId,
@@ -321,7 +321,7 @@ describe('JobManager', () => {
       describe('#SadPath', () => {
         it('should fail with a database error when adding tasks', async function () {
           const jobId = faker.string.uuid();
-          const stageId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
 
           const jobEntity = createJobEntity({ id: jobId });
           const stageEntity = createStageEntity({ jobId: jobEntity.id, id: stageId });
@@ -348,13 +348,13 @@ describe('JobManager', () => {
       describe('#HappyPath', () => {
         it('should update task status by provided ID', async function () {
           const jobId = faker.string.uuid();
-          const stageId = faker.string.uuid();
-          const taskId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
+          const taskId = faker.string.uuid() as TaskId;
 
           const jobEntity = createJobEntity({ id: jobId });
           const stageEntity = createStageEntity({ jobId: jobEntity.id, id: stageId });
           const taskEntity = createTaskEntity({
-            stageId: stageEntity.id,
+            stageId: stageEntity.id as StageId,
             id: taskId,
             status: TaskOperationStatus.IN_PROGRESS,
             xstate: inProgressStageXstatePersistentSnapshot,
@@ -375,22 +375,24 @@ describe('JobManager', () => {
             return callback(mockTx);
           });
 
-          vi.spyOn(stageManager, 'getStageEntityById').mockResolvedValue(stageEntity);
+          vi.spyOn(stageManager, 'getStageEntityById').mockResolvedValue(
+            stageEntity as unknown as Awaited<ReturnType<StageManager['getStageEntityById']>>
+          );
           vi.spyOn(stageManager, 'updateStatus').mockResolvedValue(undefined);
           vi.spyOn(stageManager, 'updateStageProgressFromTaskChanges').mockResolvedValue(undefined);
 
-          await expect(taskManager.updateStatus(taskId as TaskId, TaskOperationStatus.COMPLETED)).toResolve();
+          await expect(taskManager.updateStatus(taskId, TaskOperationStatus.COMPLETED)).toResolve();
         });
 
         it('should update task status to RETRIED', async function () {
           const jobId = faker.string.uuid();
-          const stageId = faker.string.uuid();
-          const taskId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
+          const taskId = faker.string.uuid() as TaskId;
 
           const jobEntity = createJobEntity({ id: jobId });
           const stageEntity = createStageEntity({ jobId: jobEntity.id, id: stageId });
           const taskEntity = createTaskEntity({
-            stageId: stageEntity.id,
+            stageId: stageEntity.id as StageId,
             id: taskId,
             status: TaskOperationStatus.IN_PROGRESS,
             xstate: inProgressStageXstatePersistentSnapshot,
@@ -415,18 +417,18 @@ describe('JobManager', () => {
 
           vi.spyOn(stageManager, 'updateStageProgressFromTaskChanges').mockResolvedValue(undefined);
 
-          await expect(taskManager.updateStatus(taskId as TaskId, TaskOperationStatus.FAILED)).toResolve();
+          await expect(taskManager.updateStatus(taskId, TaskOperationStatus.FAILED)).toResolve();
         });
 
         it('should update task status to IN_PROGRESS and add startTime', async function () {
           const jobId = faker.string.uuid();
-          const stageId = faker.string.uuid();
-          const taskId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
+          const taskId = faker.string.uuid() as TaskId;
 
           const jobEntity = createJobEntity({ id: jobId });
           const stageEntity = createStageEntity({ jobId: jobEntity.id, id: stageId });
           const taskEntity = createTaskEntity({
-            stageId: stageEntity.id,
+            stageId: stageEntity.id as StageId,
             id: taskId,
             status: TaskOperationStatus.PENDING,
             xstate: pendingStageXstatePersistentSnapshot,
@@ -451,13 +453,13 @@ describe('JobManager', () => {
 
           vi.spyOn(stageManager, 'updateStageProgressFromTaskChanges').mockResolvedValue(undefined);
 
-          await expect(taskManager.updateStatus(taskId as TaskId, TaskOperationStatus.IN_PROGRESS)).toResolve();
+          await expect(taskManager.updateStatus(taskId, TaskOperationStatus.IN_PROGRESS)).toResolve();
         });
 
         it('should update task status to FAILED and add endTime', async function () {
           const jobId = faker.string.uuid();
-          const stageId = faker.string.uuid();
-          const taskId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
+          const taskId = faker.string.uuid() as TaskId;
 
           const jobEntity = createJobEntity({ id: jobId, status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot });
           const stageEntity = createStageEntity({
@@ -467,7 +469,7 @@ describe('JobManager', () => {
             xstate: inProgressStageXstatePersistentSnapshot,
           });
           const taskEntity = createTaskEntity({
-            stageId: stageEntity.id,
+            stageId: stageEntity.id as StageId,
             id: taskId,
             status: TaskOperationStatus.IN_PROGRESS,
             xstate: inProgressStageXstatePersistentSnapshot,
@@ -498,18 +500,18 @@ describe('JobManager', () => {
 
           vi.spyOn(stageManager, 'updateStageProgressFromTaskChanges').mockResolvedValue(undefined);
 
-          await expect(taskManager.updateStatus(taskId as TaskId, TaskOperationStatus.FAILED)).toResolve();
+          await expect(taskManager.updateStatus(taskId, TaskOperationStatus.FAILED)).toResolve();
         });
 
         it('should update task status to IN_PROGRESS', async function () {
           const jobId = faker.string.uuid();
-          const stageId = faker.string.uuid();
-          const taskId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
+          const taskId = faker.string.uuid() as TaskId;
 
           const jobEntity = createJobEntity({ id: jobId });
           const stageEntity = createStageEntity({ jobId: jobEntity.id, id: stageId });
           const taskEntity = createTaskEntity({
-            stageId: stageEntity.id,
+            stageId: stageEntity.id as StageId,
             id: taskId,
             status: TaskOperationStatus.PENDING,
             xstate: pendingStageXstatePersistentSnapshot,
@@ -534,7 +536,7 @@ describe('JobManager', () => {
 
           vi.spyOn(stageManager, 'updateStageProgressFromTaskChanges').mockResolvedValue(undefined);
 
-          await expect(taskManager.updateStatus(taskId as TaskId, TaskOperationStatus.IN_PROGRESS)).toResolve();
+          await expect(taskManager.updateStatus(taskId, TaskOperationStatus.IN_PROGRESS)).toResolve();
         });
       });
 
@@ -555,13 +557,13 @@ describe('JobManager', () => {
 
         it("should reject update invalid task's status [from IN_PROGRESS to CREATED]", async function () {
           const jobId = faker.string.uuid();
-          const stageId = faker.string.uuid();
-          const taskId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
+          const taskId = faker.string.uuid() as TaskId;
 
           const jobEntity = createJobEntity({ id: jobId });
           const stageEntity = createStageEntity({ jobId: jobEntity.id, id: stageId });
           const taskEntity = createTaskEntity({
-            stageId: stageEntity.id,
+            stageId: stageEntity.id as StageId,
             id: taskId,
             status: TaskOperationStatus.IN_PROGRESS,
             xstate: inProgressStageXstatePersistentSnapshot,
@@ -577,7 +579,7 @@ describe('JobManager', () => {
             return callback(mockTx);
           });
 
-          await expect(taskManager.updateStatus(taskId as TaskId, TaskOperationStatus.CREATED)).rejects.toThrow(IllegalTaskStatusTransitionError);
+          await expect(taskManager.updateStatus(taskId, TaskOperationStatus.CREATED)).rejects.toThrow(IllegalTaskStatusTransitionError);
         });
       });
 
@@ -602,13 +604,13 @@ describe('JobManager', () => {
       describe('#HappyPath', () => {
         it('should update task status by provided ID', async function () {
           const jobId = faker.string.uuid();
-          const stageId = faker.string.uuid();
-          const taskId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
+          const taskId = faker.string.uuid() as TaskId;
 
           const jobEntity = createJobEntity({ id: jobId });
           const stageEntity = createStageEntity({ jobId: jobEntity.id, id: stageId, type: 'SOME_DEQUEUE_STAGE_TYPE' });
           const taskEntity = createTaskEntity({
-            stageId: stageEntity.id,
+            stageId: stageEntity.id as StageId,
             id: taskId,
             status: TaskOperationStatus.PENDING,
             xstate: pendingStageXstatePersistentSnapshot,
@@ -665,13 +667,13 @@ describe('JobManager', () => {
 
         it('should fail with bad race conditions (task already pulled)', async function () {
           const jobId = faker.string.uuid();
-          const stageId = faker.string.uuid();
-          const taskId = faker.string.uuid();
+          const stageId = faker.string.uuid() as StageId;
+          const taskId = faker.string.uuid() as TaskId;
 
           const jobEntity = createJobEntity({ id: jobId });
           const stageEntity = createStageEntity({ jobId: jobEntity.id, id: stageId });
           const taskEntity = createTaskEntity({
-            stageId: stageEntity.id,
+            stageId: stageEntity.id as StageId,
             id: taskId,
             status: TaskOperationStatus.PENDING,
             xstate: pendingStageXstatePersistentSnapshot,
@@ -700,8 +702,8 @@ describe('JobManager', () => {
         it('should successfully clean stale tasks and update them to FAILED status', async function () {
           prisma.task.findMany.mockResolvedValue([staleTaskOneHour, staleTaskFortyFiveMinutes]);
           const updateStatusMock = vi.spyOn(taskManager, 'updateStatus').mockResolvedValue({
-            id: staleTaskOneHour.id as TaskId,
-            stageId: staleTaskOneHour.stageId as StageId,
+            id: staleTaskOneHour.id,
+            stageId: staleTaskOneHour.stageId,
             status: TaskOperationStatus.FAILED,
             attempts: 0,
             maxAttempts: 2,
@@ -734,8 +736,8 @@ describe('JobManager', () => {
           const updateStatusMock = vi
             .spyOn(taskManager, 'updateStatus')
             .mockResolvedValueOnce({
-              id: staleTaskOneHour.id as TaskId,
-              stageId: staleTaskOneHour.stageId as StageId,
+              id: staleTaskOneHour.id,
+              stageId: staleTaskOneHour.stageId,
               status: TaskOperationStatus.FAILED,
               attempts: 0,
               maxAttempts: 2,

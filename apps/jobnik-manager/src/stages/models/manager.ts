@@ -38,13 +38,22 @@ import {
 } from './helper';
 import { OperationStatusMapper, stageStateMachine } from './stageStateMachine';
 
-type GetStageEntityByIdReturnType<TOptions extends StageEntityOptions> = TOptions extends { includeTasks: true; includeJob: true }
-  ? Prisma.StageGetPayload<{ include: { task: true; job: true } }>
-  : TOptions extends { includeTasks: true }
-    ? Prisma.StageGetPayload<{ include: { task: true } }>
-    : TOptions extends { includeJob: true }
-      ? Prisma.StageGetPayload<{ include: { job: true } }>
-      : Prisma.StageGetPayload<Record<string, never>>;
+/**
+ * TODO: `id`/`jobId` are re-branded here instead of at the Prisma schema level because
+ * prisma-json-types-generator throws on `@db.Uuid` string columns (breaks its `UuidFilter`
+ * handling and silently drops Json overrides for later models). Move this branding into
+ * schema.prisma once that upstream bug is fixed.
+ */
+type GetStageEntityByIdReturnType<TOptions extends StageEntityOptions> = Omit<
+  TOptions extends { includeTasks: true; includeJob: true }
+    ? Prisma.StageGetPayload<{ include: { task: true; job: true } }>
+    : TOptions extends { includeTasks: true }
+      ? Prisma.StageGetPayload<{ include: { task: true } }>
+      : TOptions extends { includeJob: true }
+        ? Prisma.StageGetPayload<{ include: { job: true } }>
+        : Prisma.StageGetPayload<Record<string, never>>,
+  'id' | 'jobId'
+> & { id: StageId; jobId: JobId };
 @injectable()
 export class StageManager {
   public constructor(
@@ -327,7 +336,7 @@ export class StageManager {
       throw new StageNotFoundError(stagesErrorMessages.stageNotFound);
     }
 
-    const jobId = stage.jobId as JobId;
+    const jobId = stage.jobId;
 
     // Idempotent status update: if already in target status, no-op
     // This prevents errors during race conditions where multiple workers
@@ -387,15 +396,17 @@ export class StageManager {
     // If the stage is marked as completed, and there is a next stage in the job, update the next stage status to PENDING
     if (targetStatus === StageOperationStatus.COMPLETED) {
       const nextStageOrder = stage.order + 1;
-      const nextStage = await tx.stage.findFirst({
+      // TODO: cast here, not at usage below, because Prisma has no concept of branded scalars
+      // (see GetStageEntityByIdReturnType above for why); revisit once that's fixed upstream.
+      const nextStage = (await tx.stage.findFirst({
         where: {
           jobId: stage.jobId,
           order: nextStageOrder,
         },
-      });
+      })) as (Prisma.StageGetPayload<object> & { id: StageId }) | null;
 
       if (nextStage?.status === StageOperationStatus.CREATED) {
-        await this.executeUpdateStatus(nextStage.id as StageId, StageOperationStatus.PENDING, tx);
+        await this.executeUpdateStatus(nextStage.id, StageOperationStatus.PENDING, tx);
         trace.getActiveSpan()?.addEvent('Next stage set to PENDING', { nextStageId: nextStage.id });
       }
 
@@ -445,14 +456,14 @@ export class StageManager {
 
     await tx.stage.update({ where: { id: stage.id }, data: stageUpdatedData });
     if (summary.total === summary.completed) {
-      await this.updateStatus(stage.id as StageId, StageOperationStatus.COMPLETED, tx);
+      await this.updateStatus(stage.id, StageOperationStatus.COMPLETED, tx);
 
       this.logger.info({
         msg: 'Stage completed, updating job progress',
         stageId: stage.id,
         jobId: stage.jobId,
       });
-      await this.updateJobCompletionProgress(stage.jobId as JobId, tx);
+      await this.updateJobCompletionProgress(stage.jobId, tx);
       trace.getActiveSpan()?.addEvent('Stage set to COMPLETED', { stageId: stage.id });
     }
   }
