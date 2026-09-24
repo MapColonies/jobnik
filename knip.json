@@ -9,7 +9,8 @@
     },
     "packages/jobnik-openapi": {},
     "packages/jobnik-sdk": {
-      "entry": ["tests/**/*.test-d.ts"]
+      "entry": ["tests/**/*.test-d.ts"],
+      "ignoreUnresolved": ["../generated/openapi-errors"]
     },
     "e2e": {
       "ignoreDependencies": ["jobnik-manager"]
