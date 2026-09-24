@@ -2,7 +2,7 @@
 // discovered dynamically from pnpm-workspace.yaml so the allow-list can never drift from the
 // real workspaces. The release-please and dependency-bump commits get two extra scopes that
 // name no workspace.
-const EXTRA_SCOPES = ['release', 'deps'];
+const EXTRA_SCOPES = ['release', 'deps', 'global'];
 
 /** @type {import('@commitlint/types').UserConfig} */
 module.exports = {

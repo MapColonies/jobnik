@@ -113,3 +113,4 @@ html/
 
 # staged from jobnik-openapi; the specification exists once, in that package
 src/openapi3.yaml
+src/generated/openapi-errors.ts

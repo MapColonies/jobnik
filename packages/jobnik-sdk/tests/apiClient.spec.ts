@@ -4,9 +4,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { MockPool } from 'undici';
 import { MockAgent } from 'undici';
+import type { JobId } from 'jobnik-openapi';
 import { createApiClient } from '../src/api/index';
 import { NetworkError, APIError } from '../src/errors/sdkErrors';
-import type { JobId } from '../src/types/brands';
 
 /* eslint-disable */
 // Add type declaration for global mockAgent

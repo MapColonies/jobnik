@@ -4,6 +4,8 @@ import { createActor } from 'xstate';
 import { trace, type Tracer } from '@opentelemetry/api';
 import { withSpanAsyncV4 } from '@map-colonies/tracing-utils';
 import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
+import type { JobId, StageId } from 'jobnik-openapi';
+import { IllegalStageStatusTransitionError, JobInFiniteStateError, JobNotFoundError, StageNotFoundError } from 'jobnik-openapi';
 import type { PrismaClient } from '@prismaClient';
 import { JobOperationStatus, Prisma, StageOperationStatus } from '@prismaClient';
 import { JobManager } from '@src/jobs/models/manager';
@@ -12,7 +14,6 @@ import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
 import { jobStateMachine } from '@src/jobs/models/jobStateMachine';
 import { illegalStatusTransitionErrorMessage, prismaKnownErrors } from '@src/common/errors';
 import { errorMessages as jobsErrorMessages } from '@src/jobs/models/errors';
-import { IllegalStageStatusTransitionError, JobInFiniteStateError, JobNotFoundError, StageNotFoundError } from '@src/common/generated/errors';
 import { errorMessages as stagesErrorMessages } from '@src/stages/models/errors';
 import type { PrismaTransaction } from '@src/db/types';
 import { ATTR_MESSAGING_DESTINATION_NAME, ATTR_MESSAGING_MESSAGE_CONVERSATION_ID } from '@src/common/semconv';
@@ -37,13 +38,22 @@ import {
 } from './helper';
 import { OperationStatusMapper, stageStateMachine } from './stageStateMachine';
 
-type GetStageEntityByIdReturnType<TOptions extends StageEntityOptions> = TOptions extends { includeTasks: true; includeJob: true }
-  ? Prisma.StageGetPayload<{ include: { task: true; job: true } }>
-  : TOptions extends { includeTasks: true }
-    ? Prisma.StageGetPayload<{ include: { task: true } }>
-    : TOptions extends { includeJob: true }
-      ? Prisma.StageGetPayload<{ include: { job: true } }>
-      : Prisma.StageGetPayload<Record<string, never>>;
+/**
+ * TODO: `id`/`jobId` are re-branded here instead of at the Prisma schema level because
+ * prisma-json-types-generator throws on `@db.Uuid` string columns (breaks its `UuidFilter`
+ * handling and silently drops Json overrides for later models). Move this branding into
+ * schema.prisma once that upstream bug is fixed.
+ */
+type GetStageEntityByIdReturnType<TOptions extends StageEntityOptions> = Omit<
+  TOptions extends { includeTasks: true; includeJob: true }
+    ? Prisma.StageGetPayload<{ include: { task: true; job: true } }>
+    : TOptions extends { includeTasks: true }
+      ? Prisma.StageGetPayload<{ include: { task: true } }>
+      : TOptions extends { includeJob: true }
+        ? Prisma.StageGetPayload<{ include: { job: true } }>
+        : Prisma.StageGetPayload<Record<string, never>>,
+  'id' | 'jobId'
+> & { id: StageId; jobId: JobId };
 @injectable()
 export class StageManager {
   public constructor(
@@ -55,7 +65,7 @@ export class StageManager {
   ) {}
 
   @withSpanAsyncV4
-  public async addStage(jobId: string, stagePayload: StageCreateModel): Promise<StageModel> {
+  public async addStage(jobId: JobId, stagePayload: StageCreateModel): Promise<StageModel> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
@@ -152,7 +162,7 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  public async getStageById(stageId: string, includeTasks?: boolean): Promise<StageModel> {
+  public async getStageById(stageId: StageId, includeTasks?: boolean): Promise<StageModel> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
@@ -172,7 +182,7 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  public async getStagesByJobId(jobId: string, includeTasks?: boolean): Promise<StageModel[]> {
+  public async getStagesByJobId(jobId: JobId, includeTasks?: boolean): Promise<StageModel[]> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
@@ -199,7 +209,7 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  public async getSummaryByStageId(stageId: string): Promise<StageSummary> {
+  public async getSummaryByStageId(stageId: StageId): Promise<StageSummary> {
     trace.getActiveSpan()?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
     });
@@ -212,7 +222,7 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  public async updateUserMetadata(stageId: string, userMetadata: Record<string, unknown>): Promise<void> {
+  public async updateUserMetadata(stageId: StageId, userMetadata: Record<string, unknown>): Promise<void> {
     trace.getActiveSpan()?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
     });
@@ -237,7 +247,7 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  public async updateStatus(stageId: string, status: StageOperationStatus, tx?: PrismaTransaction): Promise<void> {
+  public async updateStatus(stageId: StageId, status: StageOperationStatus, tx?: PrismaTransaction): Promise<void> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
@@ -265,7 +275,7 @@ export class StageManager {
    */
   @withSpanAsyncV4
   public async getStageEntityById<T extends StageEntityOptions>(
-    stageId: string,
+    stageId: StageId,
     options: T = {} as T
   ): Promise<null | GetStageEntityByIdReturnType<T>> {
     trace.getActiveSpan()?.setAttributes({
@@ -294,7 +304,7 @@ export class StageManager {
    * @param summary summary object containing the current progress aggregated task data of the stage.
    */
   @withSpanAsyncV4
-  public async updateStageProgressFromTaskChanges(stageId: string, summaryUpdatePayload: UpdateSummaryCount, tx: PrismaTransaction): Promise<void> {
+  public async updateStageProgressFromTaskChanges(stageId: StageId, summaryUpdatePayload: UpdateSummaryCount, tx: PrismaTransaction): Promise<void> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
@@ -319,12 +329,14 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  private async executeUpdateStatus(stageId: string, targetStatus: StageOperationStatus, tx: PrismaTransaction): Promise<void> {
+  private async executeUpdateStatus(stageId: StageId, targetStatus: StageOperationStatus, tx: PrismaTransaction): Promise<void> {
     const stage = await this.getStageEntityById(stageId, { includeJob: true, tx });
 
     if (!stage) {
       throw new StageNotFoundError(stagesErrorMessages.stageNotFound);
     }
+
+    const jobId = stage.jobId;
 
     // Idempotent status update: if already in target status, no-op
     // This prevents errors during race conditions where multiple workers
@@ -384,38 +396,40 @@ export class StageManager {
     // If the stage is marked as completed, and there is a next stage in the job, update the next stage status to PENDING
     if (targetStatus === StageOperationStatus.COMPLETED) {
       const nextStageOrder = stage.order + 1;
-      const nextStage = await tx.stage.findFirst({
+      // TODO: cast here, not at usage below, because Prisma has no concept of branded scalars
+      // (see GetStageEntityByIdReturnType above for why); revisit once that's fixed upstream.
+      const nextStage = (await tx.stage.findFirst({
         where: {
           jobId: stage.jobId,
           order: nextStageOrder,
         },
-      });
+      })) as (Prisma.StageGetPayload<object> & { id: StageId }) | null;
 
       if (nextStage?.status === StageOperationStatus.CREATED) {
         await this.executeUpdateStatus(nextStage.id, StageOperationStatus.PENDING, tx);
         trace.getActiveSpan()?.addEvent('Next stage set to PENDING', { nextStageId: nextStage.id });
       }
 
-      const { completedStages, totalStages } = await this.updateJobCompletionProgress(stage.jobId, tx);
+      const { completedStages, totalStages } = await this.updateJobCompletionProgress(jobId, tx);
       if (completedStages === totalStages) {
-        await this.jobManager.updateStatus(stage.jobId, JobOperationStatus.COMPLETED, tx);
+        await this.jobManager.updateStatus(jobId, JobOperationStatus.COMPLETED, tx);
         this.logger.info({
           msg: 'Job completed as all stages are done',
-          jobId: stage.jobId,
+          jobId,
         });
 
-        trace.getActiveSpan()?.addEvent('Job set to COMPLETED', { jobId: stage.jobId });
+        trace.getActiveSpan()?.addEvent('Job set to COMPLETED', { jobId });
       }
     }
 
     if (targetStatus === StageOperationStatus.IN_PROGRESS && stage.job.status === JobOperationStatus.PENDING) {
       // Update job status to IN_PROGRESS
-      await this.jobManager.updateStatus(stage.job.id, JobOperationStatus.IN_PROGRESS, tx);
-      trace.getActiveSpan()?.addEvent('Job status set to IN_PROGRESS because first stage is being processed', { jobId: stage.jobId });
+      await this.jobManager.updateStatus(jobId, JobOperationStatus.IN_PROGRESS, tx);
+      trace.getActiveSpan()?.addEvent('Job status set to IN_PROGRESS because first stage is being processed', { jobId });
     } else if (targetStatus === StageOperationStatus.FAILED) {
       // Update job status to FAILED
-      await this.jobManager.updateStatus(stage.jobId, JobOperationStatus.FAILED, tx);
-      trace.getActiveSpan()?.addEvent('Job set to FAILED because its stage failed', { jobId: stage.jobId });
+      await this.jobManager.updateStatus(jobId, JobOperationStatus.FAILED, tx);
+      trace.getActiveSpan()?.addEvent('Job set to FAILED because its stage failed', { jobId });
     }
 
     //#endregion
@@ -462,7 +476,7 @@ export class StageManager {
    * @returns The next order number for a new stage in the job.
    */
   @withSpanAsyncV4
-  private async getNextStageOrder(jobId: string): Promise<number> {
+  private async getNextStageOrder(jobId: JobId): Promise<number> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
@@ -486,7 +500,7 @@ export class StageManager {
    * @param tx transaction context.
    */
   @withSpanAsyncV4
-  private async updateJobCompletionProgress(jobId: string, tx?: PrismaTransaction): Promise<{ completedStages: number; totalStages: number }> {
+  private async updateJobCompletionProgress(jobId: JobId, tx?: PrismaTransaction): Promise<{ completedStages: number; totalStages: number }> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,

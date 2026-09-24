@@ -3,14 +3,14 @@
   "workspaces": {
     "apps/jobnik-manager": {
       "entry": ["src/instrumentation.mts"],
-      "ignore": ["src/db/prisma/generated/**", "src/common/generated/**"],
+      "ignore": ["src/db/prisma/generated/**"],
       "ignoreUnresolved": ["./instrumentation.mjs"],
       "ignoreDependencies": ["@types/express-serve-static-core", "@types/multer", "@types/swagger-ui-express", "@prismaClient"]
     },
     "packages/jobnik-openapi": {},
     "packages/jobnik-sdk": {
       "entry": ["tests/**/*.test-d.ts"],
-      "ignore": ["src/types/openapi.ts"]
+      "ignoreUnresolved": ["../generated/openapi-errors"]
     },
     "e2e": {
       "ignoreDependencies": ["jobnik-manager"]

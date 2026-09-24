@@ -3,6 +3,7 @@ import type { Logger } from '@map-colonies/js-logger';
 import { jsLogger } from '@map-colonies/js-logger';
 import { trace } from '@opentelemetry/api';
 import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
+import type { JobId } from 'jobnik-openapi';
 import type { PrismaClient } from '@prismaClient';
 import { Prisma, JobOperationStatus, Priority } from '@prismaClient';
 import { illegalStatusTransitionErrorMessage, prismaKnownErrors } from '@src/common/errors';
@@ -119,7 +120,7 @@ describe('JobManager', () => {
         it('should return a job matching the provided id', async function () {
           prisma.job.findUnique.mockResolvedValue(jobEntityWithoutStages);
 
-          const jobs = await jobManager.getJobById(jobEntityWithoutStages.id);
+          const jobs = await jobManager.getJobById(jobEntityWithoutStages.id as JobId);
 
           const { xstate, stage, ...rest } = jobEntityWithoutStages;
           const expectedJob = {
@@ -138,7 +139,7 @@ describe('JobManager', () => {
         it("should fail with a 'job not found' error when retrieving the job", async function () {
           prisma.job.findUnique.mockResolvedValue(null);
 
-          await expect(jobManager.getJobById('some_id')).rejects.toThrow(jobsErrorMessages.jobNotFound);
+          await expect(jobManager.getJobById('some_id' as JobId)).rejects.toThrow(jobsErrorMessages.jobNotFound);
         });
       });
 
@@ -146,7 +147,7 @@ describe('JobManager', () => {
         it('should fail with a database error when retrieving a job', async function () {
           prisma.job.findUnique.mockRejectedValueOnce(new Error('db connection error'));
 
-          await expect(jobManager.getJobById('some_id')).rejects.toThrow('db connection error');
+          await expect(jobManager.getJobById('some_id' as JobId)).rejects.toThrow('db connection error');
         });
       });
     });
@@ -156,7 +157,7 @@ describe('JobManager', () => {
         it("should successfully update job's user metadata by id", async function () {
           prisma.job.update.mockResolvedValue(jobEntityWithoutStages);
 
-          await expect(jobManager.updateUserMetadata(jobEntityWithoutStages.id, { newData: 'test' })).toResolve();
+          await expect(jobManager.updateUserMetadata(jobEntityWithoutStages.id as JobId, { newData: 'test' })).toResolve();
         });
       });
 
@@ -164,7 +165,9 @@ describe('JobManager', () => {
         it('should fail when updating user metadata of a non-existent job', async function () {
           prisma.job.update.mockRejectedValue(jobNotFoundError);
 
-          await expect(jobManager.updateUserMetadata('someId', { testData: 'some new data' })).rejects.toThrow(jobsErrorMessages.jobNotFound);
+          await expect(jobManager.updateUserMetadata('someId' as JobId, { testData: 'some new data' })).rejects.toThrow(
+            jobsErrorMessages.jobNotFound
+          );
         });
       });
 
@@ -172,7 +175,7 @@ describe('JobManager', () => {
         it('should fail with a database error when updating user metadata', async function () {
           prisma.job.update.mockRejectedValueOnce(new Error('db connection error'));
 
-          await expect(jobManager.updateUserMetadata('someId', { testData: 'some new data' })).rejects.toThrow('db connection error');
+          await expect(jobManager.updateUserMetadata('someId' as JobId, { testData: 'some new data' })).rejects.toThrow('db connection error');
         });
       });
     });
@@ -183,13 +186,13 @@ describe('JobManager', () => {
           prisma.job.findUnique.mockResolvedValue(jobEntityWithoutStages);
           prisma.job.update.mockResolvedValue(jobEntityWithoutStages);
 
-          await expect(jobManager.updatePriority(jobEntityWithoutStages.id, Priority.MEDIUM)).toResolve();
+          await expect(jobManager.updatePriority(jobEntityWithoutStages.id as JobId, Priority.MEDIUM)).toResolve();
         });
 
         it('should not perform a job priority update when the provided priority matches the current job priority', async function () {
           prisma.job.findUnique.mockResolvedValue({ ...jobEntityWithoutStages, priority: Priority.HIGH });
 
-          await expect(jobManager.updatePriority(jobEntityWithoutStages.id, Priority.HIGH)).rejects.toThrow(
+          await expect(jobManager.updatePriority(jobEntityWithoutStages.id as JobId, Priority.HIGH)).rejects.toThrow(
             jobsErrorMessages.priorityCannotBeUpdatedToSameValue
           );
         });
@@ -199,7 +202,7 @@ describe('JobManager', () => {
         it('should fail when updating priority of a non-existent job', async function () {
           prisma.job.findUnique.mockResolvedValue(null);
 
-          await expect(jobManager.updatePriority('someId', Priority.MEDIUM)).rejects.toThrow(jobsErrorMessages.jobNotFound);
+          await expect(jobManager.updatePriority('someId' as JobId, Priority.MEDIUM)).rejects.toThrow(jobsErrorMessages.jobNotFound);
         });
       });
 
@@ -207,7 +210,7 @@ describe('JobManager', () => {
         it('should fail with a database error when updating priority', async function () {
           prisma.job.findUnique.mockRejectedValueOnce(new Error('db connection error'));
 
-          await expect(jobManager.updatePriority('someId', Priority.MEDIUM)).rejects.toThrow('db connection error');
+          await expect(jobManager.updatePriority('someId' as JobId, Priority.MEDIUM)).rejects.toThrow('db connection error');
         });
       });
     });
@@ -228,7 +231,7 @@ describe('JobManager', () => {
             return callback(mockTx);
           });
 
-          await expect(jobManager.updateStatus(jobId, JobOperationStatus.PENDING)).toResolve();
+          await expect(jobManager.updateStatus(jobId as JobId, JobOperationStatus.PENDING)).toResolve();
         });
       });
 
@@ -244,7 +247,7 @@ describe('JobManager', () => {
             return callback(mockTx);
           });
 
-          await expect(jobManager.updateStatus('someId', JobOperationStatus.PENDING)).rejects.toThrow(jobsErrorMessages.jobNotFound);
+          await expect(jobManager.updateStatus('someId' as JobId, JobOperationStatus.PENDING)).rejects.toThrow(jobsErrorMessages.jobNotFound);
         });
 
         it('should fail on invalid status transition', async function () {
@@ -258,7 +261,7 @@ describe('JobManager', () => {
             return callback(mockTx);
           });
 
-          await expect(jobManager.updateStatus(jobEntityWithoutStages.id, JobOperationStatus.COMPLETED)).rejects.toThrow(
+          await expect(jobManager.updateStatus(jobEntityWithoutStages.id as JobId, JobOperationStatus.COMPLETED)).rejects.toThrow(
             illegalStatusTransitionErrorMessage(jobEntityWithoutStages.status, JobOperationStatus.COMPLETED)
           );
         });
@@ -276,7 +279,7 @@ describe('JobManager', () => {
             return callback(mockTx);
           });
 
-          await expect(jobManager.updateStatus('someId', JobOperationStatus.COMPLETED)).rejects.toThrow('db connection error');
+          await expect(jobManager.updateStatus('someId' as JobId, JobOperationStatus.COMPLETED)).rejects.toThrow('db connection error');
         });
       });
     });
@@ -287,7 +290,7 @@ describe('JobManager', () => {
           prisma.job.findUnique.mockResolvedValue(jobEntityWithAbortStatus);
           prisma.job.delete.mockResolvedValue(jobEntityWithAbortStatus);
 
-          await expect(jobManager.deleteJob(jobEntityWithAbortStatus.id)).toResolve();
+          await expect(jobManager.deleteJob(jobEntityWithAbortStatus.id as JobId)).toResolve();
         });
       });
 
@@ -295,13 +298,13 @@ describe('JobManager', () => {
         it('should return an error for a request to delete non finalized-status job', async function () {
           prisma.job.findUnique.mockResolvedValue(jobEntityWithoutStages);
 
-          await expect(jobManager.deleteJob(jobEntityWithoutStages.id)).rejects.toThrow(jobsErrorMessages.jobNotInFiniteState);
+          await expect(jobManager.deleteJob(jobEntityWithoutStages.id as JobId)).rejects.toThrow(jobsErrorMessages.jobNotInFiniteState);
         });
 
         it('should return an error for a request to delete a non-existent job', async function () {
           prisma.job.findUnique.mockResolvedValue(null);
 
-          await expect(jobManager.deleteJob('someId')).rejects.toThrow(jobsErrorMessages.jobNotFound);
+          await expect(jobManager.deleteJob('someId' as JobId)).rejects.toThrow(jobsErrorMessages.jobNotFound);
         });
       });
 
@@ -309,7 +312,7 @@ describe('JobManager', () => {
         it('should fail with a database error when deleting a job', async function () {
           prisma.job.findUnique.mockRejectedValueOnce(new Error('db connection error'));
 
-          await expect(jobManager.deleteJob('someId')).rejects.toThrow('db connection error');
+          await expect(jobManager.deleteJob('someId' as JobId)).rejects.toThrow('db connection error');
         });
       });
     });

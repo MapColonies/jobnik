@@ -29,8 +29,6 @@
     "assets:copy": "copyfiles -f ./config/* ./dist/config && copyfiles ./package.json dist && copyfiles -u 4 \"./src/db/prisma/migrations/**/*\" ./dist/db/prisma/migrations && copyfiles -f ./src/db/prisma/schema.prisma ./dist/db/prisma",
     "prisma:copy": "node ./scripts/copyDirectories.mjs ./src/db/prisma/generated ./dist/db/prisma/generated",
     "clean": "rimraf dist",
-    "generate:openapi-errors": "node scripts/generateOpenApiErrors.mts",
-    "generate:check": "npm run generate:openapi-errors && git diff --exit-code -- src/common/generated/errors.ts",
     "type-check": "tsc --noEmit",
     "migration:validate": "npx prisma validate --schema ./src/db/prisma/schema.prisma  ",
     "migration:format": "npx prisma format --check --schema ./src/db/prisma/schema.prisma  ",

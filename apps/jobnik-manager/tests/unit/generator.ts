@@ -1,5 +1,6 @@
 import { faker } from '@faker-js/faker';
 import { createActor } from 'xstate';
+import type { StageId, TaskId } from 'jobnik-openapi';
 import type { Prisma, Stage, Task } from '@prismaClient';
 import { JobOperationStatus, Priority, StageOperationStatus, TaskOperationStatus } from '@prismaClient';
 import type { findAndLockTask } from '@src/db/prisma/generated/client/sql';
@@ -62,8 +63,8 @@ export const createStageEntity = (override: Partial<StageWithTasks>): StageWithT
 export const createTaskEntity = (override: Partial<TaskPrismaObject>): TaskPrismaObject => {
   const taskEntity = {
     data: {},
-    stageId: faker.string.uuid(),
-    id: faker.string.uuid(),
+    stageId: faker.string.uuid() as StageId,
+    id: faker.string.uuid() as TaskId,
     status: TaskOperationStatus.CREATED,
     userMetadata: {},
     attempts: 0,

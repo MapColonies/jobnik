@@ -1,5 +1,6 @@
 import { inject, Lifecycle, scoped } from 'tsyringe';
 import { type Logger } from '@map-colonies/js-logger';
+import type { StageId } from 'jobnik-openapi';
 import { Prisma, PrismaClient } from '@prismaClient';
 import { SERVICES } from '@src/common/constants';
 import { PrismaTransaction } from '@src/db/types';
@@ -13,7 +14,7 @@ export class StageRepository {
     @inject(SERVICES.PRISMA) private readonly prisma: PrismaClient
   ) {}
 
-  public async updateStageSummary(stageId: string, summaryPayload: UpdateSummaryCount, tx: PrismaTransaction): Promise<StageSummary> {
+  public async updateStageSummary(stageId: StageId, summaryPayload: UpdateSummaryCount, tx: PrismaTransaction): Promise<StageSummary> {
     const addStatus = summaryCountsMapper[summaryPayload.add.status];
     const addCount = summaryPayload.add.count;
 

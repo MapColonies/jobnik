@@ -1,8 +1,8 @@
 import type { Options as OpossumOptions } from 'opossum';
+import type { TaskId } from 'jobnik-openapi';
 import type { Logger } from '../telemetry/logger';
 import type { ScopedApiClient } from '../api';
 import type { InferTaskData, Task } from './task';
-import type { TaskId } from './brands';
 import type { InferStageData, Stage, StageData, StageTypesTemplate, ValidStageType } from './stage';
 import type { IProducer } from './producer';
 import type { InferJobData, Job, JobData, JobTypesTemplate, ValidJobType } from './job';

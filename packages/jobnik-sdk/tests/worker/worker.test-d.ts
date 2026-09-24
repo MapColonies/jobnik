@@ -1,7 +1,7 @@
 import { describe, it, expectTypeOf } from 'vitest';
+import type { TaskId } from 'jobnik-openapi';
 import { Worker } from '../../src/clients/worker';
 import type { ApiClient } from '../../src/api';
-import type { TaskId } from '../../src/types/brands';
 import type { NoopLogger } from '../../src/telemetry/noopLogger';
 import type { TaskHandler, WorkerOptions } from '../../src/types/worker';
 import type { IProducer } from '../../src/types/producer';

@@ -5,7 +5,15 @@ import { trace, type Tracer } from '@opentelemetry/api';
 import { withSpanAsyncV4 } from '@map-colonies/tracing-utils';
 import { subMinutes } from 'date-fns';
 import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
-import { Prisma, StageOperationStatus, Task, TaskOperationStatus, type PrismaClient } from '@prismaClient';
+import type { StageId, TaskId } from 'jobnik-openapi';
+import {
+  NotAllowedToAddTasksToInProgressStageError,
+  StageInFiniteStateError,
+  StageNotFoundError,
+  TaskNotFoundError,
+  TaskStatusUpdateFailedError,
+} from 'jobnik-openapi';
+import { Prisma, StageOperationStatus, TaskOperationStatus, type PrismaClient } from '@prismaClient';
 import { SERVICES, XSTATE_DONE_STATE } from '@common/constants';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
 import { StageManager } from '@src/stages/models/manager';
@@ -16,13 +24,6 @@ import { stageStateMachine } from '@src/stages/models/stageStateMachine';
 import { type ConfigType } from '@src/common/config';
 import type { UpdateSummaryCount } from '@src/stages/models/models';
 import type { PrismaTransaction } from '@src/db/types';
-import {
-  NotAllowedToAddTasksToInProgressStageError,
-  StageInFiniteStateError,
-  StageNotFoundError,
-  TaskNotFoundError,
-  TaskStatusUpdateFailedError,
-} from '@src/common/generated/errors';
 import { ATTR_MESSAGING_DESTINATION_NAME, ATTR_MESSAGING_MESSAGE_ID } from '@src/common/semconv';
 import { paginate } from '@src/common/utils/pagination';
 import { TaskRepository } from '../DAL/taskRepository';
@@ -42,7 +43,7 @@ export class TaskManager {
   ) {}
 
   @withSpanAsyncV4
-  public async addTasks(stageId: string, tasksPayload: TaskCreateModel[]): Promise<TaskModel[]> {
+  public async addTasks(stageId: StageId, tasksPayload: TaskCreateModel[]): Promise<TaskModel[]> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
@@ -139,7 +140,7 @@ export class TaskManager {
   }
 
   @withSpanAsyncV4
-  public async getTaskById(taskId: string): Promise<TaskModel> {
+  public async getTaskById(taskId: TaskId): Promise<TaskModel> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
@@ -155,7 +156,7 @@ export class TaskManager {
   }
 
   @withSpanAsyncV4
-  public async getTasksByStageId(stageId: string, query: TasksByStageIdQuery): Promise<TasksPaginatedResponse> {
+  public async getTasksByStageId(stageId: StageId, query: TasksByStageIdQuery): Promise<TasksPaginatedResponse> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
@@ -175,7 +176,7 @@ export class TaskManager {
   }
 
   @withSpanAsyncV4
-  public async updateUserMetadata(taskId: string, userMetadata: Record<string, unknown>): Promise<void> {
+  public async updateUserMetadata(taskId: TaskId, userMetadata: Record<string, unknown>): Promise<void> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
@@ -200,7 +201,7 @@ export class TaskManager {
   }
 
   @withSpanAsyncV4
-  public async updateStatus(taskId: string, status: TaskOperationStatus, tx?: PrismaTransaction): Promise<TaskModel> {
+  public async updateStatus(taskId: TaskId, status: TaskOperationStatus, tx?: PrismaTransaction): Promise<TaskModel> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
@@ -247,7 +248,7 @@ export class TaskManager {
    * @returns The task entity if found, otherwise null.
    */
   @withSpanAsyncV4
-  public async getTaskEntityById(taskId: string, tx?: PrismaTransaction): Promise<TaskPrismaObject | null> {
+  public async getTaskEntityById(taskId: TaskId, tx?: PrismaTransaction): Promise<TaskPrismaObject | null> {
     trace.getActiveSpan()?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
     });
@@ -259,8 +260,10 @@ export class TaskManager {
       },
     };
 
+    // TODO: cast here, not at usage, because Prisma has no concept of branded scalars
+    // (see TaskPrismaObject in models.ts for why); revisit once that's fixed upstream.
     const task = await prisma.task.findUnique(queryBody);
-    return task;
+    return task as TaskPrismaObject | null;
   }
 
   /**
@@ -279,7 +282,9 @@ export class TaskManager {
       const cutoffTime = subMinutes(new Date(), staleTaskThresholdInMinutes);
 
       // Find tasks that are stuck in IN_PROGRESS state beyond the time threshold
-      const staleTasks = await this.prisma.task.findMany({
+      // TODO: cast here, not at usage, because Prisma has no concept of branded scalars
+      // (see TaskPrismaObject in models.ts for why); revisit once that's fixed upstream.
+      const staleTasks = (await this.prisma.task.findMany({
         where: {
           status: TaskOperationStatus.IN_PROGRESS,
           startTime: {
@@ -291,7 +296,7 @@ export class TaskManager {
           stageId: true,
           startTime: true,
         },
-      });
+      })) as Pick<TaskPrismaObject, 'id' | 'stageId' | 'startTime'>[];
 
       if (staleTasks.length === 0) {
         this.logger.debug({ msg: 'No stale tasks found for cleanup' });
@@ -352,7 +357,7 @@ export class TaskManager {
    * @returns The updated task model
    */
   @withSpanAsyncV4
-  private async executeUpdateStatus(taskId: string, status: TaskOperationStatus, tx: PrismaTransaction): Promise<TaskModel> {
+  private async executeUpdateStatus(taskId: TaskId, status: TaskOperationStatus, tx: PrismaTransaction): Promise<TaskModel> {
     const task = await this.getTaskEntityById(taskId, tx);
 
     if (!task) {
@@ -428,7 +433,9 @@ export class TaskManager {
       data: { ...taskDataToUpdate, status: nextStatus, xstate: newPersistedSnapshot, startTime, endTime },
     };
 
-    const updatedTasks = await tx.task.updateManyAndReturn(updateQueryBody);
+    // TODO: cast here, not at usage below, because Prisma has no concept of branded scalars
+    // (see TaskPrismaObject in models.ts for why); revisit once that's fixed upstream.
+    const updatedTasks = (await tx.task.updateManyAndReturn(updateQueryBody)) as TaskPrismaObject[];
     if (updatedTasks[0] === undefined) {
       // Race condition detected: another process already modified this task
       this.logger.warn({
@@ -510,12 +517,12 @@ export class TaskManager {
    * @param previousStatus - The expected current status to prevent race conditions.
    * @returns The filter object for the update query.
    */
-  private createUpdateWhereClause(taskId: string, previousStatus: TaskOperationStatus): { id: string; status: TaskOperationStatus } {
+  private createUpdateWhereClause(taskId: TaskId, previousStatus: TaskOperationStatus): { id: string; status: TaskOperationStatus } {
     return { id: taskId, status: previousStatus };
   }
 
   private async updateStageSummary(
-    stageId: string,
+    stageId: StageId,
     previousStatus: TaskOperationStatus,
     nextStatus: TaskOperationStatus,
     tx: PrismaTransaction
@@ -533,7 +540,7 @@ export class TaskManager {
    * @param staleTasks - Array of stale task objects
    * @returns Object containing success and failure counts
    */
-  private async updateStaleTasksStatus(staleTasks: Pick<Task, 'id' | 'stageId' | 'startTime'>[]): Promise<{
+  private async updateStaleTasksStatus(staleTasks: Pick<TaskPrismaObject, 'id' | 'stageId' | 'startTime'>[]): Promise<{
     successCount: number;
     failureCount: number;
   }> {

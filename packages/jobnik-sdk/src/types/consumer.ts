@@ -5,7 +5,7 @@
  * @template StageTypes - Interface defining stage types with their metadata, data, and task schemas
  */
 
-import type { TaskId } from './brands';
+import type { TaskId } from 'jobnik-openapi';
 import type { StageTypesTemplate, ValidStageType } from './stage';
 import type { InferTaskData, Task } from './task';
 
