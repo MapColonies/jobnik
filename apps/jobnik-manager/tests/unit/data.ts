@@ -1,9 +1,9 @@
 import { faker } from '@faker-js/faker';
 import { createActor } from 'xstate';
-import { JobOperationStatus } from '@prismaClient';
 import { jobStateMachine } from '@src/jobs/models/jobStateMachine';
 import { stageStateMachine } from '@src/stages/models/stageStateMachine';
 import { taskStateMachine } from '@src/tasks/models/taskStateMachine';
+import { JobOperationStatus } from '@src/db/persistenceModel';
 import { createJobEntity, createStageEntity } from './generator';
 
 const deleteActor = createActor(jobStateMachine).start();

@@ -8,7 +8,7 @@ import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
 import type { StageId, TaskId } from 'jobnik-openapi';
 import { IllegalTaskStatusTransitionError, NotAllowedToAddTasksToInProgressStageError, StageInFiniteStateError } from 'jobnik-openapi';
 import type { PrismaClient } from '@prismaClient';
-import { Prisma, StageOperationStatus, TaskOperationStatus, JobOperationStatus } from '@prismaClient';
+import { Prisma } from '@prismaClient';
 import { StageManager } from '@src/stages/models/manager';
 import { JobManager } from '@src/jobs/models/manager';
 import { errorMessages as stagesErrorMessages } from '@src/stages/models/errors';
@@ -21,6 +21,7 @@ import { TaskRepository } from '@src/tasks/DAL/taskRepository';
 import { SERVICE_NAME } from '@src/common/constants';
 import { getConfig, initConfig } from '@src/common/config';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
+import { StageOperationStatus, TaskOperationStatus, JobOperationStatus } from '@src/db/persistenceModel';
 import { createJobEntity, createStageEntity, createTaskEntity } from '../generator';
 import { abortedStageXstatePersistentSnapshot, inProgressStageXstatePersistentSnapshot, pendingStageXstatePersistentSnapshot } from '../data';
 

@@ -1,8 +1,7 @@
 import { faker } from '@faker-js/faker';
 import { createActor } from 'xstate';
 import type { StageId, TaskId } from 'jobnik-openapi';
-import type { Prisma, Stage, Task } from '@prismaClient';
-import { JobOperationStatus, Priority, StageOperationStatus, TaskOperationStatus } from '@prismaClient';
+import type { Prisma } from '@prismaClient';
 import type { findAndLockTask } from '@src/db/prisma/generated/client/sql';
 import { jobStateMachine } from '@src/jobs/models/jobStateMachine';
 import { stageStateMachine } from '@src/stages/models/stageStateMachine';
@@ -10,15 +9,16 @@ import type { TaskPrismaObject } from '@src/tasks/models/models';
 import { taskStateMachine } from '@src/tasks/models/taskStateMachine';
 import { defaultStatusCounts } from '@src/stages/models/helper';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
+import { type Job, type Stage, type Task, JobOperationStatus, Priority, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 
 const stageInitializedPersistedSnapshot = createActor(stageStateMachine).start().getPersistedSnapshot();
 const taskInitializedPersistedSnapshot = createActor(taskStateMachine).start().getPersistedSnapshot();
 
 export const randomUuid = faker.string.uuid();
-export interface JobWithStages extends Prisma.JobGetPayload<Record<string, unknown>> {
+export interface JobWithStages extends Job {
   stage?: Stage[];
 }
-export interface StageWithTasks extends Prisma.StageGetPayload<Record<string, unknown>> {
+export interface StageWithTasks extends Stage {
   task?: Task[];
 }
 

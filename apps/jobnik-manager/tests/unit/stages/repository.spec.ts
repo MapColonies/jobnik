@@ -4,10 +4,10 @@ import { faker } from '@faker-js/faker';
 import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
 import type { StageId } from 'jobnik-openapi';
 import type { PrismaClient } from '@prismaClient';
-import { TaskOperationStatus } from '@prismaClient';
 import type { UpdateSummaryCount } from '@src/stages/models/models';
 import { defaultStatusCounts } from '@src/stages/models/helper';
 import { StageRepository } from '@src/stages/DAL/stageRepository';
+import { TaskOperationStatus } from '@src/db/persistenceModel';
 import { createStageEntity } from '../generator';
 
 let prisma: DeepMockProxy<PrismaClient>;

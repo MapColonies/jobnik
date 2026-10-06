@@ -1,7 +1,7 @@
 import { createActor } from 'xstate';
-import { TaskOperationStatus } from '@prismaClient';
 import { convertArrayPrismaTaskToTaskResponse } from '@src/tasks/models/helper';
 import { createCamelCaseMapper } from '@src/common/utils/formatter';
+import { TaskOperationStatus } from '@src/db/persistenceModel';
 import type { StageCreateModel, StageModel, StagePrismaObject, StageSummary } from './models';
 import { stageStateMachine } from './stageStateMachine';
 

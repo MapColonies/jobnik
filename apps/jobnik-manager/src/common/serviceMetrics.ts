@@ -3,8 +3,9 @@ import type { Logger } from '@map-colonies/js-logger';
 import type { FactoryFunction } from 'tsyringe';
 import type { Registry } from 'prom-client';
 import { Gauge } from 'prom-client';
-import { TaskOperationStatus, StageOperationStatus, JobOperationStatus, type PrismaClient } from '@prismaClient';
+import type { PrismaClient } from '@prismaClient';
 import { SERVICES } from '@common/constants';
+import { TaskOperationStatus, StageOperationStatus, JobOperationStatus } from '@src/db/persistenceModel';
 
 /**
  * Get count of jobs by all statuses

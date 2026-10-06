@@ -8,7 +8,7 @@ import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
 import type { JobId, StageId } from 'jobnik-openapi';
 import { JobInFiniteStateError } from 'jobnik-openapi';
 import type { PrismaClient } from '@prismaClient';
-import { Prisma, StageOperationStatus, JobOperationStatus } from '@prismaClient';
+import { Prisma } from '@prismaClient';
 import { StageManager } from '@src/stages/models/manager';
 import { JobManager } from '@src/jobs/models/manager';
 import { errorMessages as jobsErrorMessages } from '@src/jobs/models/errors';
@@ -19,6 +19,7 @@ import { defaultStatusCounts } from '@src/stages/models/helper';
 import { StageRepository } from '@src/stages/DAL/stageRepository';
 import type { JobPrismaObject } from '@src/jobs/models/models';
 import { SERVICE_NAME } from '@src/common/constants';
+import { StageOperationStatus, JobOperationStatus } from '@src/db/persistenceModel';
 import {
   completedStageXstatePersistentSnapshot,
   inProgressStageXstatePersistentSnapshot,

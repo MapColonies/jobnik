@@ -11,7 +11,7 @@ import {
   type RequestSender,
 } from '@map-colonies/openapi-helpers/requestSender';
 import { openapiFilePath, type paths, type operations, type JobId } from 'jobnik-openapi';
-import { JobOperationStatus, Priority, StageOperationStatus, type PrismaClient } from '@prismaClient';
+import { type PrismaClient } from '@prismaClient';
 import type { PrismaTransaction } from '@src/db/types';
 import { getApp } from '@src/app';
 import { SERVICES, successMessages } from '@common/constants';
@@ -23,6 +23,7 @@ import type { JobCreateModel } from '@src/jobs/models/models';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 import { createProxyMock } from '@tests/configurations/mockPrisma';
+import { JobOperationStatus, Priority, StageOperationStatus } from '@src/db/persistenceModel';
 import { createJobnikTree, createMockPrismaError, createMockUnknownDbError, truncateAllTables } from '../common/utils';
 import { createJobRecord, createJobRequestBody, testJobId } from './helpers';
 

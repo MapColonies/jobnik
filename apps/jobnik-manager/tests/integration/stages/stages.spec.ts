@@ -12,7 +12,7 @@ import {
 } from '@map-colonies/openapi-helpers/requestSender';
 import { faker } from '@faker-js/faker';
 import { openapiFilePath, type paths, type operations, type JobId, type StageId } from 'jobnik-openapi';
-import { JobOperationStatus, StageOperationStatus, TaskOperationStatus, type PrismaClient } from '@prismaClient';
+import { type PrismaClient } from '@prismaClient';
 import type { PrismaTransaction } from '@src/db/types';
 import { getApp } from '@src/app';
 import { SERVICES } from '@common/constants';
@@ -32,6 +32,7 @@ import {
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 import { createProxyMock } from '@tests/configurations/mockPrisma';
+import { JobOperationStatus, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 import { createJobRecord, createJobRequestBody, testJobId, testStageId } from '../jobs/helpers';
 import { createJobnikTree, createMockPrismaError, createMockUnknownDbError, truncateAllTables } from '../common/utils';
 

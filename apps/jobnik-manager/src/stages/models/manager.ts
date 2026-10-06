@@ -7,7 +7,7 @@ import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
 import type { JobId, StageId } from 'jobnik-openapi';
 import { IllegalStageStatusTransitionError, JobInFiniteStateError, JobNotFoundError, StageNotFoundError } from 'jobnik-openapi';
 import type { PrismaClient } from '@prismaClient';
-import { JobOperationStatus, Prisma, StageOperationStatus } from '@prismaClient';
+import { Prisma } from '@prismaClient';
 import { JobManager } from '@src/jobs/models/manager';
 import { SERVICES, TX_TIMEOUT_MS, XSTATE_DONE_STATE } from '@common/constants';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
@@ -18,6 +18,7 @@ import { errorMessages as stagesErrorMessages } from '@src/stages/models/errors'
 import type { PrismaTransaction } from '@src/db/types';
 import { ATTR_MESSAGING_DESTINATION_NAME, ATTR_MESSAGING_MESSAGE_CONVERSATION_ID } from '@src/common/semconv';
 import { paginate } from '@src/common/utils/pagination';
+import { type Stage, JobOperationStatus, StageOperationStatus } from '@src/db/persistenceModel';
 import { StageRepository } from '../DAL/stageRepository';
 import type {
   StageCreateModel,
@@ -51,7 +52,7 @@ type GetStageEntityByIdReturnType<TOptions extends StageEntityOptions> = Omit<
       ? Prisma.StageGetPayload<{ include: { task: true } }>
       : TOptions extends { includeJob: true }
         ? Prisma.StageGetPayload<{ include: { job: true } }>
-        : Prisma.StageGetPayload<Record<string, never>>,
+        : Stage,
   'id' | 'jobId'
 > & { id: StageId; jobId: JobId };
 @injectable()
@@ -403,7 +404,7 @@ export class StageManager {
           jobId: stage.jobId,
           order: nextStageOrder,
         },
-      })) as (Prisma.StageGetPayload<object> & { id: StageId }) | null;
+      })) as (Stage & { id: StageId }) | null;
 
       if (nextStage?.status === StageOperationStatus.CREATED) {
         await this.executeUpdateStatus(nextStage.id, StageOperationStatus.PENDING, tx);
