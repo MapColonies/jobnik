@@ -2,7 +2,7 @@ import { describe, beforeEach, afterEach, it, expect, beforeAll, vi } from 'vite
 import { jsLogger } from '@map-colonies/js-logger';
 import { trace } from '@opentelemetry/api';
 import { addMinutes } from 'date-fns';
-import { TaskOperationStatus, StageOperationStatus, JobOperationStatus, type PrismaClient } from '@prismaClient';
+import { type PrismaClient } from '@prismaClient';
 import { getApp } from '@src/app';
 import { SERVICES } from '@common/constants';
 import { initConfig } from '@src/common/config';
@@ -10,6 +10,7 @@ import { inProgressStageXstatePersistentSnapshot } from '@tests/unit/data';
 import { defaultStatusCounts } from '@src/stages/models/helper';
 import { TaskManager } from '@src/tasks/models/manager';
 import { createProxyMock } from '@tests/configurations/mockPrisma';
+import { TaskOperationStatus, StageOperationStatus, JobOperationStatus } from '@src/db/persistenceModel';
 import { createJobnikTree, truncateAllTables } from '../common/utils';
 
 describe('TaskSweeper', () => {

@@ -1,5 +1,5 @@
 import type { Snapshot } from 'xstate';
-import type { Prisma } from '@prismaClient';
+import type { Task } from '@src/db/persistenceModel';
 import type { findAndLockTask } from '@src/db/prisma/generated/client/sql';
 import type { TaskModel, TaskPrismaObject } from './models';
 
@@ -8,7 +8,7 @@ import type { TaskModel, TaskPrismaObject } from './models';
  * @param prismaObjects db entity
  * @returns TaskModel
  */
-export function convertPrismaToTaskResponse(prismaObjects: Prisma.TaskGetPayload<Record<string, unknown>>): TaskModel {
+export function convertPrismaToTaskResponse(prismaObjects: Task): TaskModel {
   const { data, userMetadata, xstate, creationTime, tracestate, startTime, endTime, updateTime, ...rest } = prismaObjects;
 
   const transformedFields = {
@@ -29,7 +29,7 @@ export function convertPrismaToTaskResponse(prismaObjects: Prisma.TaskGetPayload
  * @param prismaObjects array of db entities
  * @returns array of TaskModel
  */
-export function convertArrayPrismaTaskToTaskResponse(prismaObjects: Prisma.TaskGetPayload<Record<string, unknown>>[]): TaskModel[] {
+export function convertArrayPrismaTaskToTaskResponse(prismaObjects: Task[]): TaskModel[] {
   return prismaObjects.map((task) => convertPrismaToTaskResponse(task));
 }
 

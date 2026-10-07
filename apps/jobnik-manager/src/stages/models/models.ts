@@ -1,7 +1,7 @@
 import type { components, operations, JobId, StageId } from 'jobnik-openapi';
-import type { Prisma, TaskOperationStatus } from '@prismaClient';
 import type { JobPrismaObject } from '@src/jobs/models/models';
 import type { PrismaTransaction } from '@src/db/types';
+import type { Job, Stage, Task, TaskOperationStatus } from '@src/db/persistenceModel';
 
 type StageModel = components['schemas']['getStageResponse'];
 type StageCreateModel = components['schemas']['createStagePayloadRequest'];
@@ -34,9 +34,9 @@ interface StageEntityOptions {
  * Type definition for Stage with optional Task and Job inclusion
  * @interface StagePrismaObject
  */
-interface StagePrismaObjectBase extends Prisma.StageGetPayload<object> {
-  task?: Prisma.TaskGetPayload<object>[];
-  job?: Prisma.JobGetPayload<object>;
+interface StagePrismaObjectBase extends Stage {
+  task?: Task[];
+  job?: Job;
 }
 type StagePrismaObject = StagePrismaObjectBase;
 

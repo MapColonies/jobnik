@@ -1,5 +1,5 @@
 import type { components, operations, StageId, TaskId } from 'jobnik-openapi';
-import type { Prisma } from '@prismaClient';
+import type { Task } from '@src/db/persistenceModel';
 
 type TaskModel = components['schemas']['taskResponse'];
 type TaskCreateModel = components['schemas']['createTaskPayload'];
@@ -10,7 +10,7 @@ type TasksFindCriteriaArg = operations['getTasksByCriteriaV1']['parameters']['qu
  * handling and silently drops Json overrides for later models). Move this branding into
  * schema.prisma once that upstream bug is fixed.
  */
-type TaskPrismaObject = Omit<Prisma.TaskGetPayload<Prisma.TaskDefaultArgs>, 'id' | 'stageId'> & { id: TaskId; stageId: StageId };
+type TaskPrismaObject = Omit<Task, 'id' | 'stageId'> & { id: TaskId; stageId: StageId };
 type TasksPaginatedResponse = components['schemas']['tasksPaginatedResponse'];
 type TasksByStageIdQuery = operations['getTasksByStageIdV1']['parameters']['query'];
 

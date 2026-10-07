@@ -2,8 +2,8 @@
 import type { Snapshot } from 'xstate';
 import { createActor, setup } from 'xstate';
 import { IllegalTaskStatusTransitionError } from 'jobnik-openapi';
-import { TaskOperationStatus } from '@prismaClient';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
+import { TaskOperationStatus } from '@src/db/persistenceModel';
 
 type changeStatusOperations = 'pend' | 'complete' | 'retry' | 'process' | 'fail' | 'create';
 

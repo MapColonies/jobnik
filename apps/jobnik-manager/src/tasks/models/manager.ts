@@ -13,7 +13,7 @@ import {
   TaskNotFoundError,
   TaskStatusUpdateFailedError,
 } from 'jobnik-openapi';
-import { Prisma, StageOperationStatus, TaskOperationStatus, type PrismaClient } from '@prismaClient';
+import { Prisma, type PrismaClient } from '@prismaClient';
 import { SERVICES, XSTATE_DONE_STATE } from '@common/constants';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
 import { StageManager } from '@src/stages/models/manager';
@@ -26,6 +26,7 @@ import type { UpdateSummaryCount } from '@src/stages/models/models';
 import type { PrismaTransaction } from '@src/db/types';
 import { ATTR_MESSAGING_DESTINATION_NAME, ATTR_MESSAGING_MESSAGE_ID } from '@src/common/semconv';
 import { paginate } from '@src/common/utils/pagination';
+import { StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 import { TaskRepository } from '../DAL/taskRepository';
 import type { TasksFindCriteriaArg, TaskModel, TaskPrismaObject, TaskCreateModel, TasksPaginatedResponse, TasksByStageIdQuery } from './models';
 import { errorMessages as tasksErrorMessages } from './errors';

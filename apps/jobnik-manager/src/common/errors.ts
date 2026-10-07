@@ -1,4 +1,4 @@
-import type { JobOperationStatus, StageOperationStatus, TaskOperationStatus } from '@prismaClient';
+import type { JobOperationStatus, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 
 export const prismaKnownErrors = {
   /**An operation failed because it depends on one or more records that were required but not found. {cause} */

@@ -4,8 +4,8 @@ import { jsLogger } from '@map-colonies/js-logger';
 import { faker } from '@faker-js/faker';
 import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
 import type { PrismaClient } from '@prismaClient';
-import { TaskOperationStatus } from '@prismaClient';
 import { TaskRepository } from '@src/tasks/DAL/taskRepository';
+import { TaskOperationStatus } from '@src/db/persistenceModel';
 import { createRawTaskEntity } from '../generator';
 
 let taskRepository: TaskRepository;

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { setup } from 'xstate';
-import { StageOperationStatus } from '@prismaClient';
+import { StageOperationStatus } from '@src/db/persistenceModel';
 
 type changeStatusOperations = 'pend' | 'wait' | 'abort' | 'complete' | 'process' | 'fail' | 'create';
 
