@@ -155,6 +155,20 @@ describe('job', function () {
 
         expect(beyondPageJobsBody.items).toHaveLength(0);
       });
+
+      it('should return 200 with only the jobs matching the priority filter', async function () {
+        await requestSender.createJobV1({ requestBody: { ...createJobRequestBody, priority: Priority.MEDIUM } });
+        await requestSender.createJobV1({ requestBody: { ...createJobRequestBody, priority: Priority.HIGH } });
+
+        const response = await requestSender.findJobsV1({ queryParams: { priority: Priority.MEDIUM } });
+
+        expectResponseStatus(response, 200);
+
+        expect(response).toSatisfyApiSpec();
+        expect(response.body.total).toBe(1);
+        expect(response.body.items).toHaveLength(1);
+        expect(response.body.items[0]).toHaveProperty('priority', Priority.MEDIUM);
+      });
     });
 
     describe('Bad Path', function () {

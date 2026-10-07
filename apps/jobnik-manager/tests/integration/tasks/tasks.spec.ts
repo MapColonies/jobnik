@@ -89,6 +89,20 @@ describe('task', function () {
         });
       });
 
+      it('should return 200 with only the tasks whose stage matches the stage_type filter', async function () {
+        const { tasks } = await createJobnikTree(prisma, {}, { type: 'SOME_TEST_TYPE_FILTER_A' }, [{}]);
+        await createJobnikTree(prisma, {}, { type: 'SOME_TEST_TYPE_FILTER_B' }, [{}]);
+
+        const response = await requestSender.getTasksByCriteriaV1({ queryParams: { stage_type: 'SOME_TEST_TYPE_FILTER_A' } });
+
+        expect(response).toSatisfyApiSpec();
+        expect(response).toMatchObject({
+          status: StatusCodes.OK,
+          body: { total: 1, items: [{ id: tasks[0]!.id }] },
+        });
+        expect(response.body).toHaveProperty('items.length', 1);
+      });
+
       it('should return 200 with empty array', async function () {
         const someRandomUuid = faker.string.uuid();
         const response = await requestSender.getTasksByCriteriaV1({ queryParams: { stage_id: someRandomUuid as StageId } });
@@ -512,6 +526,24 @@ describe('task', function () {
         });
       });
 
+      it('should count the added tasks as PENDING in the stage summary', async function () {
+        const { stage } = await createJobnikTree(prisma, {}, { summary: defaultStatusCounts }, [], { createStage: true, createTasks: false });
+
+        const response = await requestSender.addTasksV1({
+          requestBody: [
+            { data: {}, userMetadata: {} },
+            { data: {}, userMetadata: {} },
+          ],
+          pathParams: { stageId: stage.id as StageId },
+        });
+
+        expect(response).toHaveProperty('status', StatusCodes.CREATED);
+
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id as StageId } });
+
+        expect(getStageResponse.body).toHaveProperty('summary', { ...defaultStatusCounts, pending: 2, total: 2 });
+      });
+
       it('should return 200 and create new tasks for stage with existing tasks', async function () {
         const { stage } = await createJobnikTree(prisma, {}, {}, [
           { status: TaskOperationStatus.COMPLETED, xstate: completedStageXstatePersistentSnapshot },
@@ -756,6 +788,39 @@ describe('task', function () {
           status: StatusCodes.INTERNAL_SERVER_ERROR,
           body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
         });
+      });
+
+      it('should return 500 and roll back the created tasks when updating the stage summary fails', async function () {
+        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const originalTransaction = prisma.$transaction.bind(prisma);
+        const transactionSpy = createProxyMock(prisma, '$transaction');
+        transactionSpy.mockImplementationOnce(async <T>(callback: (tx: PrismaTransaction) => Promise<T>): Promise<T> =>
+          originalTransaction(async (tx) => {
+            // the stage summary is updated after the tasks are inserted, so failing it proves the insert is rolled back
+            const failingTx = new Proxy(tx, {
+              get: (target, property, receiver): unknown => {
+                if (property === '$queryRaw') {
+                  return vi.fn().mockRejectedValueOnce(createMockPrismaError());
+                }
+                return Reflect.get(target, property, receiver) as unknown;
+              },
+            });
+            return callback(failingTx);
+          })
+        );
+
+        const response = await requestSender.addTasksV1({
+          requestBody: [{ data: {}, userMetadata: {} }],
+          pathParams: { stageId: stage.id as StageId },
+        });
+
+        expect(response).toSatisfyApiSpec();
+        expect(response).toMatchObject({
+          status: StatusCodes.INTERNAL_SERVER_ERROR,
+          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
+        });
+        await expect(prisma.task.count({ where: { stageId: stage.id } })).resolves.toBe(0);
+        await expect(prisma.stage.findUnique({ where: { id: stage.id } })).resolves.toHaveProperty('summary', stage.summary);
       });
     });
   });
@@ -1388,6 +1453,49 @@ describe('task', function () {
         });
       });
 
+      it('should return the highest-priority eligible task, skipping higher-priority tasks under a paused job or a waiting stage', async function () {
+        const stageType = 'SOME_TEST_TYPE_DEQUEUE_ELIGIBLE_PRIORITY';
+        const pendingTask = { status: TaskOperationStatus.PENDING, xstate: pendingStageXstatePersistentSnapshot };
+        const summary = { ...defaultStatusCounts, pending: 1, total: 1 };
+
+        await createJobnikTree(
+          prisma,
+          { status: JobOperationStatus.PAUSED, priority: Priority.VERY_HIGH },
+          { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary, type: stageType },
+          [pendingTask]
+        );
+        await createJobnikTree(
+          prisma,
+          { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, priority: Priority.VERY_HIGH },
+          { status: StageOperationStatus.WAITING, summary, type: stageType },
+          [pendingTask]
+        );
+        const { tasks: lowPriorityTasks } = await createJobnikTree(
+          prisma,
+          { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, priority: Priority.VERY_LOW },
+          { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary, type: stageType },
+          [pendingTask]
+        );
+        const { stage: highPriorityStage, tasks: highPriorityTasks } = await createJobnikTree(
+          prisma,
+          { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, priority: Priority.HIGH },
+          { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary, type: stageType },
+          [pendingTask]
+        );
+
+        const firstResponse = await requestSender.dequeueTaskV1({ pathParams: { stageType } });
+        const secondResponse = await requestSender.dequeueTaskV1({ pathParams: { stageType } });
+        const thirdResponse = await requestSender.dequeueTaskV1({ pathParams: { stageType } });
+
+        expect(firstResponse).toSatisfyApiSpec();
+        expect(firstResponse).toMatchObject({
+          status: StatusCodes.OK,
+          body: { id: highPriorityTasks[0]!.id, stageId: highPriorityStage.id, status: TaskOperationStatus.IN_PROGRESS },
+        });
+        expect(secondResponse).toMatchObject({ status: StatusCodes.OK, body: { id: lowPriorityTasks[0]!.id } });
+        expect(thirdResponse).toHaveProperty('status', StatusCodes.NOT_FOUND);
+      });
+
       it('should add startTime when dequeuing task', async function () {
         const initialSummary = { ...defaultStatusCounts, pending: 1, total: 1 };
 
@@ -1522,6 +1630,79 @@ describe('task', function () {
         const taskResponse = await requestSender.dequeueTaskV1({
           pathParams: { stageType: 'SOME_TEST_TYPE_NO_PENDING_TASK' },
         });
+
+        expect(taskResponse).toSatisfyApiSpec();
+        expect(taskResponse).toMatchObject({
+          status: StatusCodes.NOT_FOUND,
+          body: { message: tasksErrorMessages.taskNotFound, code: 'TASK_NOT_FOUND' },
+        });
+      });
+
+      it.each([
+        { stageStatus: StageOperationStatus.CREATED },
+        { stageStatus: StageOperationStatus.WAITING },
+        { stageStatus: StageOperationStatus.COMPLETED },
+        { stageStatus: StageOperationStatus.FAILED },
+        { stageStatus: StageOperationStatus.ABORTED },
+      ])('should return 404 when the only PENDING task belongs to a $stageStatus stage', async function ({ stageStatus }) {
+        await createJobnikTree(
+          prisma,
+          { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
+          { status: stageStatus, summary: { ...defaultStatusCounts, pending: 1, total: 1 }, type: 'SOME_TEST_TYPE_INELIGIBLE_STAGE' },
+          [{ status: TaskOperationStatus.PENDING, xstate: pendingStageXstatePersistentSnapshot }]
+        );
+
+        const taskResponse = await requestSender.dequeueTaskV1({ pathParams: { stageType: 'SOME_TEST_TYPE_INELIGIBLE_STAGE' } });
+
+        expect(taskResponse).toSatisfyApiSpec();
+        expect(taskResponse).toMatchObject({
+          status: StatusCodes.NOT_FOUND,
+          body: { message: tasksErrorMessages.taskNotFound, code: 'TASK_NOT_FOUND' },
+        });
+      });
+
+      it.each([
+        { jobStatus: JobOperationStatus.CREATED },
+        { jobStatus: JobOperationStatus.PAUSED },
+        { jobStatus: JobOperationStatus.COMPLETED },
+        { jobStatus: JobOperationStatus.FAILED },
+        { jobStatus: JobOperationStatus.ABORTED },
+      ])('should return 404 when the only PENDING task belongs to a $jobStatus job', async function ({ jobStatus }) {
+        await createJobnikTree(
+          prisma,
+          { status: jobStatus },
+          {
+            status: StageOperationStatus.IN_PROGRESS,
+            xstate: inProgressStageXstatePersistentSnapshot,
+            summary: { ...defaultStatusCounts, pending: 1, total: 1 },
+            type: 'SOME_TEST_TYPE_INELIGIBLE_JOB',
+          },
+          [{ status: TaskOperationStatus.PENDING, xstate: pendingStageXstatePersistentSnapshot }]
+        );
+
+        const taskResponse = await requestSender.dequeueTaskV1({ pathParams: { stageType: 'SOME_TEST_TYPE_INELIGIBLE_JOB' } });
+
+        expect(taskResponse).toSatisfyApiSpec();
+        expect(taskResponse).toMatchObject({
+          status: StatusCodes.NOT_FOUND,
+          body: { message: tasksErrorMessages.taskNotFound, code: 'TASK_NOT_FOUND' },
+        });
+      });
+
+      it('should return 404 when the only task of the stage type is still CREATED', async function () {
+        await createJobnikTree(
+          prisma,
+          { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
+          {
+            status: StageOperationStatus.IN_PROGRESS,
+            xstate: inProgressStageXstatePersistentSnapshot,
+            summary: { ...defaultStatusCounts, created: 1, total: 1 },
+            type: 'SOME_TEST_TYPE_CREATED_TASK',
+          },
+          [{ status: TaskOperationStatus.CREATED }]
+        );
+
+        const taskResponse = await requestSender.dequeueTaskV1({ pathParams: { stageType: 'SOME_TEST_TYPE_CREATED_TASK' } });
 
         expect(taskResponse).toSatisfyApiSpec();
         expect(taskResponse).toMatchObject({
@@ -1665,6 +1846,46 @@ describe('task', function () {
             message: tasksErrorMessages.taskNotFound,
             code: 'TASK_NOT_FOUND',
           },
+        });
+      });
+
+      it('should never hand the same task to concurrent dequeue calls', async function () {
+        const taskCount = 5;
+        const concurrentDequeues = 8;
+        const stageType = 'SOME_TEST_TYPE_CONCURRENT_DEQUEUE';
+
+        const { stage, tasks } = await createJobnikTree(
+          prisma,
+          { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
+          {
+            status: StageOperationStatus.IN_PROGRESS,
+            xstate: inProgressStageXstatePersistentSnapshot,
+            summary: { ...defaultStatusCounts, pending: taskCount, total: taskCount },
+            type: stageType,
+          },
+          Array.from({ length: taskCount }, () => ({ status: TaskOperationStatus.PENDING, xstate: pendingStageXstatePersistentSnapshot }))
+        );
+
+        const responses = await Promise.all(
+          Array.from({ length: concurrentDequeues }, async () => requestSender.dequeueTaskV1({ pathParams: { stageType } }))
+        );
+
+        const okStatus: number = StatusCodes.OK;
+        const notFoundStatus: number = StatusCodes.NOT_FOUND;
+        const dequeuedIds = responses.filter((response) => response.status === okStatus).map((response) => (response.body as TaskModel).id);
+        const otherStatuses = responses.filter((response) => response.status !== okStatus).map((response) => response.status);
+
+        expect(dequeuedIds.length).toBeGreaterThan(0);
+        expect(new Set(dequeuedIds).size).toBe(dequeuedIds.length);
+        expect(tasks.map((task) => task.id)).toIncludeAllMembers(dequeuedIds);
+        expect(otherStatuses).toSatisfyAll((status: number) => status === notFoundStatus);
+
+        await expect(prisma.task.count({ where: { stageId: stage.id, status: TaskOperationStatus.IN_PROGRESS } })).resolves.toBe(dequeuedIds.length);
+        await expect(prisma.stage.findUnique({ where: { id: stage.id } })).resolves.toHaveProperty('summary', {
+          ...defaultStatusCounts,
+          pending: taskCount - dequeuedIds.length,
+          inProgress: dequeuedIds.length,
+          total: taskCount,
         });
       });
 

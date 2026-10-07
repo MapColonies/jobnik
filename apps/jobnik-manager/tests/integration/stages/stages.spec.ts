@@ -1157,6 +1157,23 @@ describe('stage', function () {
           body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
         });
       });
+
+      it('should return 500 status code when creating the stage fails', async function () {
+        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const createSpy = createProxyMock(prisma.stage, 'create');
+        createSpy.mockRejectedValueOnce(createMockPrismaError());
+
+        const response = await requestSender.addStageV1({
+          requestBody: { data: {}, type: 'SOME_STAGE_TYPE', userMetadata: {} },
+          pathParams: { jobId: job.id as JobId },
+        });
+
+        expect(response).toSatisfyApiSpec();
+        expect(response).toMatchObject({
+          status: StatusCodes.INTERNAL_SERVER_ERROR,
+          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
+        });
+      });
     });
   });
 
@@ -1200,6 +1217,35 @@ describe('stage', function () {
         expect(setStatusResponse).toHaveProperty('status', StatusCodes.OK);
 
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage1.id as StageId } });
+
+        expect(getStageResponse).toHaveProperty('body.status', StageOperationStatus.PENDING);
+      });
+
+      it('should return 200 status code and move a later stage to PENDING when the previous stage is COMPLETED', async function () {
+        const { job } = await createJobnikTree(
+          prisma,
+          {},
+          { status: StageOperationStatus.COMPLETED, xstate: completedStageXstatePersistentSnapshot, order: 1 },
+          [],
+          { createStage: true, createTasks: false }
+        );
+        const secondStageResponse = await requestSender.addStageV1({
+          pathParams: { jobId: job.id as JobId },
+          requestBody: { type: 'SECOND_STAGE', data: {}, userMetadata: {} },
+        });
+        const stage2 = secondStageResponse.body as StageModel;
+
+        expect(stage2).toHaveProperty('status', StageOperationStatus.CREATED);
+
+        const setStatusResponse = await requestSender.updateStageStatusV1({
+          pathParams: { stageId: stage2.id },
+          requestBody: { status: StageOperationStatus.PENDING },
+        });
+
+        expect(setStatusResponse).toSatisfyApiSpec();
+        expect(setStatusResponse).toHaveProperty('status', StatusCodes.OK);
+
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage2.id } });
 
         expect(getStageResponse).toHaveProperty('body.status', StageOperationStatus.PENDING);
       });
