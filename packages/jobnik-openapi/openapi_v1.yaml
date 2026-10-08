@@ -2,7 +2,7 @@ openapi: 3.0.1
 info:
   title: Job Manager Service - API v1
   description: Job Manager Service API version 1
-  version: 0.2.0
+  version: 0.3.0
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
@@ -1574,9 +1574,9 @@ paths:
                 $ref: '#/components/schemas/taskNotFoundResponse'
         '409':
           description: >-
-            task was claimed by another worker.
-            This occurs when multiple workers attempt to dequeue the same task simultaneously.
-            The client should retry the dequeue operation to get a different task.
+            task was claimed by another worker. This occurs when multiple
+            workers attempt to dequeue the same task simultaneously. The client
+            should retry the dequeue operation to get a different task.
           content:
             application/json:
               schema:
@@ -1837,9 +1837,9 @@ paths:
                 $ref: '#/components/schemas/taskNotFoundResponse'
         '409':
           description: >-
-            task status was modified by another request.
-            This occurs when multiple workers attempt to update the same task simultaneously.
-            The current state of the task has changed since it was retrieved.
+            task status was modified by another request. This occurs when
+            multiple workers attempt to update the same task simultaneously. The
+            current state of the task has changed since it was retrieved.
           content:
             application/json:
               schema:
@@ -1990,7 +1990,9 @@ components:
     pageParam:
       in: query
       name: page
-      description: 1-based page number for pagination. Requesting beyond the last page returns an empty items array.
+      description: >-
+        1-based page number for pagination. Requesting beyond the last page
+        returns an empty items array.
       required: false
       schema:
         type: integer
