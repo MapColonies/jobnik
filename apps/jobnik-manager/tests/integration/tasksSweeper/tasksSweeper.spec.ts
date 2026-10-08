@@ -1,11 +1,12 @@
 import { describe, beforeEach, afterEach, it, expect, beforeAll, vi } from 'vitest';
 import { jsLogger } from '@map-colonies/js-logger';
 import { trace } from '@opentelemetry/api';
-import { addMinutes } from 'date-fns';
+import { addMinutes, subMinutes } from 'date-fns';
+import type { StageId } from 'jobnik-openapi';
 import { type PrismaClient } from '@prismaClient';
 import { getApp } from '@src/app';
 import { SERVICES } from '@common/constants';
-import { initConfig } from '@src/common/config';
+import { getConfig, initConfig } from '@src/common/config';
 import { inProgressStageXstatePersistentSnapshot } from '@tests/unit/data';
 import { defaultStatusCounts } from '@src/stages/models/helper';
 import { TaskManager } from '@src/tasks/models/manager';
@@ -43,6 +44,30 @@ describe('TaskSweeper', () => {
   });
 
   describe('#cleanStaleTasks', function () {
+    const createStageWithStaleTasks = async (taskCount: number) =>
+      createJobnikTree(
+        prisma,
+        { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
+        {
+          status: StageOperationStatus.IN_PROGRESS,
+          xstate: inProgressStageXstatePersistentSnapshot,
+          type: 'SOME_STALE_TEST',
+          summary: { ...defaultStatusCounts, inProgress: taskCount, total: taskCount },
+        },
+        Array.from({ length: taskCount }, () => ({
+          status: TaskOperationStatus.IN_PROGRESS,
+          xstate: inProgressStageXstatePersistentSnapshot,
+          maxAttempts: 1,
+          attempts: 0,
+          startTime: subMinutes(new Date(), 45),
+        }))
+      );
+
+    const getTaskStatuses = async (stageId: StageId): Promise<TaskOperationStatus[]> => {
+      const tasks = await prisma.task.findMany({ where: { stageId }, select: { status: true } });
+      return tasks.map((task) => task.status).sort();
+    };
+
     describe('Happy Path', function () {
       it('should clean stale tasks and update stage summaries correctly', async function () {
         // Create job tree with stale tasks that have maxAttempts: 1 so they go directly to FAILED
@@ -163,6 +188,42 @@ describe('TaskSweeper', () => {
         });
       });
 
+      it('should clean only tasks that started before the configured threshold', async function () {
+        const thresholdInMinutes = getConfig().get('task.staleTaskThresholdInMinutes');
+        const { stage } = await createJobnikTree(
+          prisma,
+          { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
+          {
+            status: StageOperationStatus.IN_PROGRESS,
+            xstate: inProgressStageXstatePersistentSnapshot,
+            type: 'SOME_STALE_TEST',
+            summary: { ...defaultStatusCounts, inProgress: 2, total: 2 },
+          },
+          [
+            {
+              status: TaskOperationStatus.IN_PROGRESS,
+              xstate: inProgressStageXstatePersistentSnapshot,
+              maxAttempts: 1,
+              attempts: 0,
+              startTime: subMinutes(new Date(), thresholdInMinutes + 1),
+            },
+            {
+              status: TaskOperationStatus.IN_PROGRESS,
+              xstate: inProgressStageXstatePersistentSnapshot,
+              maxAttempts: 1,
+              attempts: 0,
+              startTime: subMinutes(new Date(), thresholdInMinutes - 0.5),
+            },
+          ]
+        );
+        const [staleTask, freshTask] = await prisma.task.findMany({ where: { stageId: stage.id }, orderBy: { startTime: 'asc' } });
+
+        await expect(taskManager.cleanStaleTasks()).toResolve();
+
+        await expect(prisma.task.findUnique({ where: { id: staleTask!.id } })).resolves.toHaveProperty('status', TaskOperationStatus.FAILED);
+        await expect(prisma.task.findUnique({ where: { id: freshTask!.id } })).resolves.toHaveProperty('status', TaskOperationStatus.IN_PROGRESS);
+      });
+
       it('should handle empty database gracefully', async function () {
         await expect(taskManager.cleanStaleTasks()).toResolve();
       });
@@ -237,6 +298,31 @@ describe('TaskSweeper', () => {
         findManySpy.mockRejectedValueOnce(new Error('Database error'));
 
         await expect(taskManager.cleanStaleTasks()).toReject();
+      });
+
+      it('should keep cleaning the remaining stale tasks when updating one of them fails', async function () {
+        const { stage } = await createStageWithStaleTasks(2);
+        const originalTransaction = prisma.$transaction.bind(prisma);
+        const transactionSpy = createProxyMock(prisma, '$transaction');
+        transactionSpy.mockImplementation(originalTransaction);
+        transactionSpy.mockRejectedValueOnce(new Error('Database error'));
+
+        await expect(taskManager.cleanStaleTasks()).toResolve();
+
+        await expect(getTaskStatuses(stage.id as StageId)).resolves.toEqual([TaskOperationStatus.FAILED, TaskOperationStatus.IN_PROGRESS].sort());
+      });
+
+      it.each([
+        { errorKind: 'an Error', error: new Error('Database error') },
+        { errorKind: 'a non-Error value', error: 'Database error' },
+      ])('should resolve and leave the tasks untouched when every update throws $errorKind', async function ({ error }) {
+        const { stage } = await createStageWithStaleTasks(2);
+        const transactionSpy = createProxyMock(prisma, '$transaction');
+        transactionSpy.mockRejectedValue(error);
+
+        await expect(taskManager.cleanStaleTasks()).toResolve();
+
+        await expect(getTaskStatuses(stage.id as StageId)).resolves.toEqual([TaskOperationStatus.IN_PROGRESS, TaskOperationStatus.IN_PROGRESS]);
       });
     });
   });

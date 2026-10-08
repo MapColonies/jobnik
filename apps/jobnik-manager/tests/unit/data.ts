@@ -1,10 +1,7 @@
-import { faker } from '@faker-js/faker';
 import { createActor } from 'xstate';
 import { jobStateMachine } from '@src/jobs/models/jobStateMachine';
 import { stageStateMachine } from '@src/stages/models/stageStateMachine';
 import { taskStateMachine } from '@src/tasks/models/taskStateMachine';
-import { JobOperationStatus } from '@src/db/persistenceModel';
-import { createJobEntity, createStageEntity } from './generator';
 
 const deleteActor = createActor(jobStateMachine).start();
 deleteActor.send({ type: 'abort' });
@@ -34,18 +31,6 @@ retriedTaskActor.send({ type: 'pend' });
 retriedTaskActor.send({ type: 'process' });
 retriedTaskActor.send({ type: 'retry' });
 
-const stageId = faker.string.uuid();
-
-export const jobId = faker.string.uuid();
-export const jobEntityWithoutStages = createJobEntity({ id: jobId });
-export const stageEntity = createStageEntity({ id: stageId, jobId, data: { name: 'someStage' } });
-
-export const jobEntityWithStages = createJobEntity({
-  id: jobId,
-  data: {},
-  stage: [stageEntity],
-});
-
 export const abortedXstatePersistentSnapshot = deleteActor.getPersistedSnapshot();
 export const inProgressStageXstatePersistentSnapshot = runningStageActor.getPersistedSnapshot();
 export const abortedStageXstatePersistentSnapshot = abortedStageActor.getPersistedSnapshot();
@@ -53,8 +38,3 @@ export const pendingStageXstatePersistentSnapshot = pendingStageActor.getPersist
 export const failedStageXstatePersistentSnapshot = failedStageActor.getPersistedSnapshot();
 export const retryTaskXstatePersistentSnapshot = retriedTaskActor.getPersistedSnapshot();
 export const completedStageXstatePersistentSnapshot = completedStageActor.getPersistedSnapshot();
-
-export const jobEntityWithAbortStatus = createJobEntity({
-  xstate: abortedXstatePersistentSnapshot,
-  status: JobOperationStatus.ABORTED,
-});
