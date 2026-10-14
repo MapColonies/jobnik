@@ -2,10 +2,10 @@ openapi: 3.0.3
 info:
   title: Job Manager Service - API v1
   description: Job Manager Service API version 1
-  version: 0.2.0
+  version: 0.3.0
   license:
     name: MIT
-    url: 'https://opensource.org/licenses/MIT'
+    url: https://opensource.org/licenses/MIT
 security: []
 paths:
   /v1/jobs:
@@ -109,7 +109,7 @@ paths:
                     input_path: /data/traced/batch_001
                     output_path: /data/output/batch_001
                   traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
-                  tracestate: 'rojo=00f067aa0ba902b7,congo=t61rcWkgMzE'
+                  tracestate: rojo=00f067aa0ba902b7,congo=t61rcWkgMzE
       responses:
         '201':
           description: Job created successfully
@@ -172,9 +172,9 @@ paths:
                       deadline: '2025-08-01T00:00:00.000Z'
                       cost_center: CC-12345
                     traceparent: 00-660f9511f3ac52e5b827557766551111-22b378cc5ca902b7-01
-                    tracestate: 'analytics=dept123,priority=very_high'
+                    tracestate: analytics=dept123,priority=very_high
         '400':
-          description: 'Invalid request, could not create job'
+          description: Invalid request, could not create job
           content:
             application/json:
               schema:
@@ -209,7 +209,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/internalErrorsResponse'
-  '/v1/jobs/{jobId}':
+  /v1/jobs/{jobId}:
     parameters:
       - $ref: '#/components/parameters/jobId'
     get:
@@ -348,14 +348,14 @@ paths:
                     traceparent: 00-660f9511f3ac52e5b827557766551111-22b378cc5ca902b7-01
                     data:
                       source_path: /data/production
-                      destination: 's3://backup-bucket/2025-07-26'
+                      destination: s3://backup-bucket/2025-07-26
                       compression: gzip
                       encryption: true
                     userMetadata:
                       backup_type: daily
                       retention_days: 30
         '400':
-          description: 'Invalid request, could not get job'
+          description: Invalid request, could not get job
           content:
             application/json:
               schema:
@@ -374,7 +374,7 @@ paths:
                 $ref: '#/components/schemas/internalErrorsResponse'
     delete:
       operationId: deleteJobV1
-      summary: 'Delete a job and all its associated resources (stages, tasks)'
+      summary: Delete a job and all its associated resources (stages, tasks)
       description: >
         Permanently removes a job and all its associated stages and tasks from
         the system.
@@ -438,7 +438,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/internalErrorsResponse'
-  '/v1/jobs/{jobId}/user-metadata':
+  /v1/jobs/{jobId}/user-metadata:
     patch:
       operationId: updateUserMetadataV1
       parameters:
@@ -492,7 +492,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/internalErrorsResponse'
-  '/v1/jobs/{jobId}/priority':
+  /v1/jobs/{jobId}/priority:
     parameters:
       - $ref: '#/components/parameters/jobId'
     patch:
@@ -560,7 +560,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/internalErrorsResponse'
-  '/v1/jobs/{jobId}/status':
+  /v1/jobs/{jobId}/status:
     parameters:
       - $ref: '#/components/parameters/jobId'
     put:
@@ -645,7 +645,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/internalErrorsResponse'
-  '/v1/jobs/{jobId}/stages':
+  /v1/jobs/{jobId}/stages:
     parameters:
       - $ref: '#/components/parameters/jobId'
     get:
@@ -704,7 +704,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/internalErrorsResponse'
-  '/v1/jobs/{jobId}/stage':
+  /v1/jobs/{jobId}/stage:
     post:
       operationId: addStageV1
       summary: Add a new stage as the last stage in the job workflow
@@ -781,7 +781,7 @@ paths:
                     validation_type: schema_check
                     strict_mode: true
                   traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
-                  tracestate: 'vendor=trace123,service=validation'
+                  tracestate: vendor=trace123,service=validation
       responses:
         '201':
           description: Stage successfully created and added to the job
@@ -819,7 +819,7 @@ paths:
                       retried: 0
                       total: 0
                     traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-33c489dd6db902b7-01
-                    tracestate: 'processing=batch001,stage=data_proc'
+                    tracestate: processing=batch001,stage=data_proc
                 waiting_stage_response:
                   summary: Response for manual approval stage creation
                   value:
@@ -924,7 +924,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/internalErrorsResponse'
-  '/v1/stages/{stageId}':
+  /v1/stages/{stageId}:
     parameters:
       - $ref: '#/components/parameters/stageId'
     get:
@@ -971,7 +971,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/internalErrorsResponse'
-  '/v1/stages/{stageId}/summary':
+  /v1/stages/{stageId}/summary:
     get:
       operationId: getStageSummaryV1
       parameters:
@@ -1017,7 +1017,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/internalErrorsResponse'
-  '/v1/stages/{stageId}/user-metadata':
+  /v1/stages/{stageId}/user-metadata:
     patch:
       operationId: updateStageUserMetadataV1
       parameters:
@@ -1071,7 +1071,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/internalErrorsResponse'
-  '/v1/stages/{stageId}/status':
+  /v1/stages/{stageId}/status:
     put:
       operationId: updateStageStatusV1
       parameters:
@@ -1179,7 +1179,7 @@ paths:
                           - UNKNOWN_ERROR
                           - ILLEGAL_JOB_STATUS_TRANSITION
                           - JOB_NOT_FOUND
-  '/v1/stages/{stageId}/tasks':
+  /v1/stages/{stageId}/tasks:
     parameters:
       - $ref: '#/components/parameters/stageId'
     get:
@@ -1283,10 +1283,10 @@ paths:
                 summary: API integration tasks with different configurations
                 value:
                   - data:
-                      endpoint: 'https://api.external.com/customers'
+                      endpoint: https://api.external.com/customers
                       method: GET
                       headers:
-                        Authorization: 'Bearer ${API_TOKEN}'
+                        Authorization: Bearer ${API_TOKEN}
                       pagination:
                         page_size: 100
                         max_pages: 50
@@ -1294,10 +1294,10 @@ paths:
                       source: customer_system
                       priority: high
                   - data:
-                      endpoint: 'https://api.external.com/orders'
+                      endpoint: https://api.external.com/orders
                       method: GET
                       headers:
-                        Authorization: 'Bearer ${API_TOKEN}'
+                        Authorization: Bearer ${API_TOKEN}
                       query_params:
                         start_date: '2025-01-01T00:00:00.000Z'
                         end_date: '2025-07-27T00:00:00.000Z'
@@ -1315,7 +1315,7 @@ paths:
                         - demographic_api
                         - credit_api
                     traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
-                    tracestate: 'customer=enrich123,priority=high'
+                    tracestate: customer=enrich123,priority=high
                     maxAttempts: 2
                   - data:
                       process_type: data_validation
@@ -1352,7 +1352,7 @@ paths:
                       creationTime: '2025-07-27T10:30:00.000Z'
                       updateTime: '2025-07-27T10:30:00.000Z'
                       traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-55e6abbf8fd902b7-01
-                      tracestate: 'file=001,processing=csv_parquet'
+                      tracestate: file=001,processing=csv_parquet
                     - id: 469e8a0c-9232-4144-920f-fb5cef356ff7
                       data:
                         file_path: /data/input/file_002.csv
@@ -1368,7 +1368,7 @@ paths:
                       creationTime: '2025-07-27T10:30:00.000Z'
                       updateTime: '2025-07-27T10:30:00.000Z'
                       traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-66f7bcc090e902b7-01
-                      tracestate: 'file=002,processing=csv_parquet'
+                      tracestate: file=002,processing=csv_parquet
                     - id: 6a7ecf04-4455-41d1-aa04-8786178cb4a3
                       data:
                         file_path: /data/input/file_003.csv
@@ -1384,16 +1384,16 @@ paths:
                       creationTime: '2025-07-27T10:30:00.000Z'
                       updateTime: '2025-07-27T10:30:00.000Z'
                       traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-77081dd1a1f902b7-01
-                      tracestate: 'file=003,processing=csv_parquet'
+                      tracestate: file=003,processing=csv_parquet
                 api_integration_tasks_response:
                   summary: Response for API integration tasks creation
                   value:
                     - id: ddfad658-da33-4573-b5a3-d70a204a3e0b
                       data:
-                        endpoint: 'https://api.external.com/customers'
+                        endpoint: https://api.external.com/customers
                         method: GET
                         headers:
-                          Authorization: 'Bearer ${API_TOKEN}'
+                          Authorization: Bearer ${API_TOKEN}
                         pagination:
                           page_size: 100
                           max_pages: 50
@@ -1407,13 +1407,13 @@ paths:
                       creationTime: '2025-07-27T10:30:00.000Z'
                       updateTime: '2025-07-27T10:30:00.000Z'
                       traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-88192ee2b20902b7-01
-                      tracestate: 'api=customers,source=external'
+                      tracestate: api=customers,source=external
                     - id: df59d74e-f442-4e66-b8c9-b312ad948c47
                       data:
-                        endpoint: 'https://api.external.com/orders'
+                        endpoint: https://api.external.com/orders
                         method: GET
                         headers:
-                          Authorization: 'Bearer ${API_TOKEN}'
+                          Authorization: Bearer ${API_TOKEN}
                         query_params:
                           start_date: '2025-01-01T00:00:00.000Z'
                           end_date: '2025-07-27T00:00:00.000Z'
@@ -1427,7 +1427,7 @@ paths:
                       creationTime: '2025-07-27T10:30:00.000Z'
                       updateTime: '2025-07-27T10:30:00.000Z'
                       traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-99203ff3c31902b7-01
-                      tracestate: 'api=orders,source=external'
+                      tracestate: api=orders,source=external
                 tasks_with_lifecycle_states:
                   summary: >-
                     Tasks showing different lifecycle states with timing
@@ -1527,7 +1527,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/internalErrorsResponse'
-  '/v1/stages/{stageType}/tasks/dequeue':
+  /v1/stages/{stageType}/tasks/dequeue:
     parameters:
       - $ref: '#/components/parameters/stageType'
     patch:
@@ -1658,7 +1658,7 @@ paths:
                 $ref: '#/components/schemas/internalErrorsResponse'
       tags:
         - tasks
-  '/v1/tasks/{taskId}':
+  /v1/tasks/{taskId}:
     parameters:
       - $ref: '#/components/parameters/taskId'
     get:
@@ -1696,7 +1696,7 @@ paths:
                 $ref: '#/components/schemas/internalErrorsResponse'
       tags:
         - tasks
-  '/v1/tasks/{taskId}/user-metadata':
+  /v1/tasks/{taskId}/user-metadata:
     patch:
       operationId: updateTaskUserMetadataV1
       parameters:
@@ -1750,7 +1750,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/internalErrorsResponse'
-  '/v1/tasks/{taskId}/status':
+  /v1/tasks/{taskId}/status:
     parameters:
       - $ref: '#/components/parameters/taskId'
     put:
@@ -1910,7 +1910,7 @@ components:
       type: integer
       minimum: 0
       maximum: 100
-      description: 'Completion percentage of a job, stage, or task (0-100)'
+      description: Completion percentage of a job, stage, or task (0-100)
     attempts:
       type: integer
       minimum: 0
@@ -1949,7 +1949,7 @@ components:
       description: |
         W3C traceparent for distributed tracing. Auto-injected if not provided.
         See [W3C Trace Context](https://www.w3.org/TR/trace-context/).
-      pattern: '^[\da-f]{2}-[\da-f]{32}-[\da-f]{16}-[\da-f]{2}$'
+      pattern: ^[\da-f]{2}-[\da-f]{32}-[\da-f]{16}-[\da-f]{2}$
       example: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
     tracestate:
       type: string
@@ -1958,7 +1958,7 @@ components:
         available.
       pattern: >-
         ^[a-z0-9][a-z0-9_\\-\\*\\/]*=[^,=]+(?:,[a-z0-9][a-z0-9_\\-\\*\\/]*=[^,=]+)*$
-      example: 'rojo=00f067aa0ba902b7,congo=t61rcWkgMzE'
+      example: rojo=00f067aa0ba902b7,congo=t61rcWkgMzE
     successMessages:
       type: string
       enum:
@@ -2346,7 +2346,7 @@ components:
     taskId:
       type: string
       format: uuid
-      description: 'Unique identifier for a task, generated by the system upon task creation'
+      description: Unique identifier for a task, generated by the system upon task creation
     taskPayload:
       type: object
       additionalProperties: true
@@ -2645,7 +2645,7 @@ components:
     fromDate:
       in: query
       name: from_date
-      description: 'Filter results by update time, starting from this date/time'
+      description: Filter results by update time, starting from this date/time
       required: false
       schema:
         type: string
@@ -2653,7 +2653,7 @@ components:
     endDate:
       in: query
       name: end_date
-      description: 'Filter results by update time, ending at this date/time'
+      description: Filter results by update time, ending at this date/time
       required: false
       schema:
         type: string
@@ -2661,14 +2661,14 @@ components:
     includeStages:
       in: query
       name: should_return_stages
-      description: 'When true, includes stage data in the response'
+      description: When true, includes stage data in the response
       required: false
       schema:
         $ref: '#/components/schemas/returnStage'
     includeTasks:
       in: query
       name: should_return_tasks
-      description: 'When true, includes task data in the response'
+      description: When true, includes task data in the response
       required: false
       schema:
         $ref: '#/components/schemas/returnTask'
@@ -2689,7 +2689,7 @@ components:
     paramStageType:
       in: query
       name: stage_type
-      description: 'Filter results by stage type (e.g., processing, validation)'
+      description: Filter results by stage type (e.g., processing, validation)
       required: false
       schema:
         $ref: '#/components/schemas/stageType'
