@@ -1,0 +1,767 @@
+{
+  "version": "8",
+  "dialect": "postgres",
+  "id": "df2e3a03-2be2-4c90-ba7f-5504ace652e2",
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
+  "ddl": [
+    {
+      "name": "job_manager",
+      "entityType": "schemas"
+    },
+    {
+      "values": ["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED", "ABORTED", "CREATED", "PAUSED"],
+      "name": "job_operation_status_enum",
+      "entityType": "enums",
+      "schema": "job_manager"
+    },
+    {
+      "values": ["VERY_HIGH", "HIGH", "MEDIUM", "LOW", "VERY_LOW"],
+      "name": "priority_enum",
+      "entityType": "enums",
+      "schema": "job_manager"
+    },
+    {
+      "values": ["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED", "ABORTED", "WAITING", "CREATED"],
+      "name": "stage_operation_status_enum",
+      "entityType": "enums",
+      "schema": "job_manager"
+    },
+    {
+      "values": ["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED", "CREATED", "RETRIED"],
+      "name": "task_operation_status_enum",
+      "entityType": "enums",
+      "schema": "job_manager"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "job",
+      "entityType": "tables",
+      "schema": "job_manager"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "stage",
+      "entityType": "tables",
+      "schema": "job_manager"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "task",
+      "entityType": "tables",
+      "schema": "job_manager"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "data",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "type": "job_operation_status_enum",
+      "typeSchema": "job_manager",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'CREATED'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "xstate",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "percentage",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "type": "timestamp(3)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "CURRENT_TIMESTAMP",
+      "generated": null,
+      "identity": null,
+      "name": "creation_time",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "type": "timestamp(3)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "update_time",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "user_metadata",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "type": "priority_enum",
+      "typeSchema": "job_manager",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'VERY_LOW'",
+      "generated": null,
+      "identity": null,
+      "name": "priority",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "traceparent",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tracestate",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "data",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "1",
+      "generated": null,
+      "identity": null,
+      "name": "order",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "percentage",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "user_metadata",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "summary",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "type": "stage_operation_status_enum",
+      "typeSchema": "job_manager",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'CREATED'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "xstate",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "type": "varchar(50)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'unknown'",
+      "generated": null,
+      "identity": null,
+      "name": "type",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "traceparent",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tracestate",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "data",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "task_operation_status_enum",
+      "typeSchema": "job_manager",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'CREATED'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "xstate",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "timestamp(3)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "CURRENT_TIMESTAMP",
+      "generated": null,
+      "identity": null,
+      "name": "creation_time",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "timestamp(3)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "update_time",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "timestamp(3)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "start_time",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "timestamp(3)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "end_time",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "user_metadata",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "stage_id",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "attempts",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "1",
+      "generated": null,
+      "identity": null,
+      "name": "max_attempts",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "traceparent",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tracestate",
+      "entityType": "columns",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "priority",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "status IN ('PENDING', 'IN_PROGRESS', 'CREATED')",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "JOBS_ID_ACTIVE_STATUS_IDX",
+      "entityType": "indexes",
+      "schema": "job_manager",
+      "table": "job"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "job_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "status IN ('PENDING', 'IN_PROGRESS', 'CREATED', 'WAITING')",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "STAGE_ID_ACTIVE_STATUS_IDX",
+      "entityType": "indexes",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "job_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "order",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "STAGE_JOB_ID_ORDER_IDX",
+      "entityType": "indexes",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "type",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "STAGE_TYPE_IDX",
+      "entityType": "indexes",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "stage_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "status IN ('PENDING', 'IN_PROGRESS', 'CREATED')",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "TASKS_ID_ACTIVE_STATUS_IDX",
+      "entityType": "indexes",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "stage_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "TASK_STAGE_ID_IDX",
+      "entityType": "indexes",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "start_time",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "status = 'IN_PROGRESS'",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "TASK_IN_PROGRESS_START_TIME_IDX",
+      "entityType": "indexes",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "nameExplicit": true,
+      "columns": ["job_id"],
+      "schemaTo": "job_manager",
+      "tableTo": "job",
+      "columnsTo": ["id"],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "name": "stage_job_id_fkey",
+      "entityType": "fks",
+      "schema": "job_manager",
+      "table": "stage"
+    },
+    {
+      "nameExplicit": true,
+      "columns": ["stage_id"],
+      "schemaTo": "job_manager",
+      "tableTo": "stage",
+      "columnsTo": ["id"],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "name": "task_stage_id_fkey",
+      "entityType": "fks",
+      "schema": "job_manager",
+      "table": "task"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "job_pkey",
+      "schema": "job_manager",
+      "table": "job",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "stage_pkey",
+      "schema": "job_manager",
+      "table": "stage",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "task_pkey",
+      "schema": "job_manager",
+      "table": "task",
+      "entityType": "pks"
+    }
+  ],
+  "renames": []
+}
