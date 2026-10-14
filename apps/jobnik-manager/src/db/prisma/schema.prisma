@@ -35,35 +35,35 @@ model Job {
 }
 
 enum JobOperationStatus {
-  PENDING     @map("Pending")
-  IN_PROGRESS @map("In-Progress")
-  COMPLETED   @map("Completed")
-  FAILED      @map("Failed")
-  ABORTED     @map("Aborted")
-  CREATED     @map("Created")
-  PAUSED      @map("Paused")
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  ABORTED
+  CREATED
+  PAUSED
 
   @@map("job_operation_status_enum")
 }
 
 enum StageOperationStatus {
-  PENDING     @map("Pending")
-  IN_PROGRESS @map("In-Progress")
-  COMPLETED   @map("Completed")
-  FAILED      @map("Failed")
-  ABORTED     @map("Aborted")
-  WAITING     @map("Waiting")
-  CREATED     @map("Created")
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  ABORTED
+  WAITING
+  CREATED
 
   @@map("stage_operation_status_enum")
 }
 
 enum Priority {
-  VERY_HIGH @map("Very-High")
-  HIGH      @map("High")
-  MEDIUM    @map("Medium")
-  LOW       @map("Low")
-  VERY_LOW  @map("Very-Low")
+  VERY_HIGH
+  HIGH
+  MEDIUM
+  LOW
+  VERY_LOW
 
   @@map("priority_enum")
 }
@@ -114,12 +114,12 @@ model Task {
 }
 
 enum TaskOperationStatus {
-  PENDING     @map("Pending")
-  IN_PROGRESS @map("In-Progress")
-  COMPLETED   @map("Completed")
-  FAILED      @map("Failed")
-  CREATED     @map("Created")
-  RETRIED     @map("Retried")
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CREATED
+  RETRIED
 
   @@map("task_operation_status_enum")
 }

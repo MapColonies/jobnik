@@ -15,13 +15,13 @@ export namespace findAndLockTask {
     xstate: $runtime.JsonValue;
     creation_time: Date;
     update_time: Date;
+    start_time: Date | null;
+    end_time: Date | null;
     user_metadata: $runtime.JsonValue;
     stage_id: string;
     attempts: number;
     max_attempts: number;
     traceparent: string;
     tracestate: string | null;
-    end_time: Date | null;
-    start_time: Date | null;
   };
 }

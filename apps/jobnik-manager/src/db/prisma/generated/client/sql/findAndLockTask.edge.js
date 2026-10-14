@@ -4,5 +4,5 @@
 'use strict';
 const { makeTypedQueryFactory: $mkFactory } = require('../runtime/edge.js');
 exports.findAndLockTask = /*#__PURE__*/ $mkFactory(
-  'SELECT t.*\nFROM "job_manager"."task" t\nINNER JOIN "job_manager"."stage" s ON t."stage_id" = s.id\nINNER JOIN "job_manager"."job" j ON s."job_id" = j.id\nWHERE s.type = $1\nAND t.status IN (\'Pending\', \'Retried\')\nAND s.status IN (\'Pending\', \'In-Progress\')\nAND j.status IN (\'Pending\', \'In-Progress\')\nORDER BY j.priority ASC\nLIMIT 1\nFOR UPDATE OF t SKIP LOCKED;'
+  'SELECT t.*\nFROM "job_manager"."task" t\nINNER JOIN "job_manager"."stage" s ON t."stage_id" = s.id\nINNER JOIN "job_manager"."job" j ON s."job_id" = j.id\nWHERE s.type = $1\nAND t.status IN (\'PENDING\', \'RETRIED\')\nAND s.status IN (\'PENDING\', \'IN_PROGRESS\')\nAND j.status IN (\'PENDING\', \'IN_PROGRESS\')\nORDER BY j.priority ASC\nLIMIT 1\nFOR UPDATE OF t SKIP LOCKED;'
 );
