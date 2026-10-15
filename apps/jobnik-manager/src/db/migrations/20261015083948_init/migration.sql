@@ -5,7 +5,7 @@ CREATE TYPE "job_manager"."priority_enum" AS ENUM('VERY_HIGH', 'HIGH', 'MEDIUM',
 CREATE TYPE "job_manager"."stage_operation_status_enum" AS ENUM('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'ABORTED', 'WAITING', 'CREATED');--> statement-breakpoint
 CREATE TYPE "job_manager"."task_operation_status_enum" AS ENUM('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'CREATED', 'RETRIED');--> statement-breakpoint
 CREATE TABLE "job_manager"."job" (
-	"id" uuid PRIMARY KEY,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 	"data" jsonb DEFAULT '{}' NOT NULL,
 	"status" "job_manager"."job_operation_status_enum" DEFAULT 'CREATED'::"job_manager"."job_operation_status_enum" NOT NULL,
 	"xstate" jsonb NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE "job_manager"."job" (
 );
 --> statement-breakpoint
 CREATE TABLE "job_manager"."stage" (
-	"id" uuid PRIMARY KEY,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 	"data" jsonb DEFAULT '{}' NOT NULL,
 	"job_id" uuid NOT NULL,
 	"order" integer DEFAULT 1 NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE "job_manager"."stage" (
 );
 --> statement-breakpoint
 CREATE TABLE "job_manager"."task" (
-	"id" uuid PRIMARY KEY,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 	"data" jsonb DEFAULT '{}' NOT NULL,
 	"status" "job_manager"."task_operation_status_enum" DEFAULT 'CREATED'::"job_manager"."task_operation_status_enum" NOT NULL,
 	"xstate" jsonb NOT NULL,
