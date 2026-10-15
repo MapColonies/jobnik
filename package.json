@@ -28,9 +28,9 @@
     "docs": "typedoc"
   },
   "devDependencies": {
-    "@commitlint/cli": "^21.2.2",
+    "@commitlint/cli": "^21.2.3",
     "@commitlint/config-pnpm-scopes": "^21.2.0",
-    "@commitlint/types": "^21.2.0",
+    "@commitlint/types": "^21.2.3",
     "@map-colonies/commitlint-config": "^2.0.1",
     "@map-colonies/prettier-config": "^1.0.0",
     "husky": "^9.1.7",
