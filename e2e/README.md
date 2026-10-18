@@ -80,7 +80,7 @@ The test suite uses Docker Compose to orchestrate services. The `manager` and `m
 
 - **jobnik-manager** - Job management API (port 8080)
 - **db** - PostgreSQL 14 database (port 5432)
-- **migrator** - Prisma database migrations
+- **migrator** - Database migrations (runs the image's `node ./db/runMigrations.js`)
 
 ```bash
 # Start services
