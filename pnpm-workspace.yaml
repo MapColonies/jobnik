@@ -30,3 +30,6 @@ catalog:
   '@opentelemetry/context-async-hooks': ^2.11.0
   typescript: ^5.9.3
   prettier: ^3.9.6
+  drizzle-orm: 1.0.0-rc.4
+  drizzle-kit: 1.0.0-rc.4
+  '@map-colonies/drizzle-utils': 1.0.0

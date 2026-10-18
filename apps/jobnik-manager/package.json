@@ -26,7 +26,7 @@
     "build:docker-no-cache": "cross-env DOCKER_FLAGS=--no-cache npm run build:docker",
     "start": "npm run build && cd dist && node --import ./instrumentation.mjs ./index.js",
     "start:dev": "npm run build && cd dist && cross-env CONFIG_OFFLINE_MODE=true  node --enable-source-maps --import ./instrumentation.mjs ./index.js",
-    "assets:copy": "copyfiles -f ./config/* ./dist/config && copyfiles ./package.json dist && copyfiles -u 4 \"./src/db/prisma/migrations/**/*\" ./dist/db/prisma/migrations && copyfiles -f ./src/db/prisma/schema.prisma ./dist/db/prisma",
+    "assets:copy": "copyfiles -f ./config/* ./dist/config && copyfiles ./package.json dist && copyfiles -u 3 \"./src/db/migrations/**/*\" ./dist/db/migrations && copyfiles -u 4 \"./src/db/prisma/migrations/**/*\" ./dist/db/prisma/migrations && copyfiles -f ./src/db/prisma/schema.prisma ./dist/db/prisma",
     "prisma:copy": "node ./scripts/copyDirectories.mjs ./src/db/prisma/generated ./dist/db/prisma/generated",
     "clean": "rimraf dist",
     "type-check": "tsc --noEmit",
@@ -37,7 +37,11 @@
     "migration:generate": "npx prisma migrate dev --schema ./src/db/prisma/schema.prisma --name ",
     "migration:generate-types": "npx prisma generate --schema ./src/db/prisma/schema.prisma",
     "migration:generate-sql-types": "npx prisma generate --sql --schema ./src/db/prisma/schema.prisma",
-    "migration:deploy": "npx prisma migrate deploy --schema ./src/db/prisma/schema.prisma"
+    "migration:deploy": "npx prisma migrate deploy --schema ./src/db/prisma/schema.prisma",
+    "migration:create": "drizzle-kit generate --config drizzle.config.mts --name",
+    "migration:run": "npm run build && cd dist && node ./db/runMigrations.js",
+    "migration:run:dev": "npm run build && cd dist && cross-env CONFIG_OFFLINE_MODE=true node ./db/runMigrations.js",
+    "generate:check": "drizzle-kit generate --config drizzle.config.mts && test -z \"$(git status --porcelain -- src/db/migrations)\""
   },
   "directories": {
     "test": "tests"
@@ -47,6 +51,7 @@
   "dependencies": {
     "@godaddy/terminus": "^4.12.1",
     "@map-colonies/config": "^4.0.1",
+    "@map-colonies/drizzle-utils": "catalog:",
     "@map-colonies/error-express-handler": "^4.0.0",
     "@map-colonies/express-access-log-middleware": "^4.0.0",
     "@map-colonies/js-logger": "catalog:",
@@ -64,6 +69,7 @@
     "@prisma/instrumentation": "^6.19.0",
     "compression": "^1.8.1",
     "date-fns": "^4.1.0",
+    "drizzle-orm": "catalog:",
     "express": "^4.21.2",
     "express-openapi-validator": "^5.6.0",
     "http-status-codes": "catalog:",
@@ -97,6 +103,7 @@
     "copyfiles": "catalog:",
     "cross-env": "^10.1.0",
     "docker-compose": "catalog:",
+    "drizzle-kit": "catalog:",
     "eslint": "catalog:",
     "get-port-please": "^3.2.0",
     "is-ci": "catalog:",
