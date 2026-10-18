@@ -31,65 +31,29 @@ Requesting beyond the last page returns `items: []`, not an error.
 
 ## Migration
 
+Migrations are managed with [drizzle-kit](https://orm.drizzle.team/docs/kit-overview). The table definitions in `src/db/entities` are the source of truth, and the generated SQL lives in `src/db/migrations`.
+
 <ins>**How to create a new migration**</ins>
 
-_**Update and Edit schema**_
+1. Edit the table definitions in `src/db/entities`.
+2. `npm run migration:create <migration name>` - Generates a new migration from the difference between the table definitions and the latest migration snapshot.
 
-- New migration will need to be generated once you have made modification on 'schema.prisma' file [read more](https://www.prisma.io/docs/orm/reference/prisma-schema-reference)
-- For example:
-  - You modified exists model
-  - Add another model or type
-  - Remove some model
-  - Add some constraint.
+<ins>**Running migrations**</ins>
 
-_**Create new migration on modified schema**_
+Migrations are applied by a standalone command, `node ./db/runMigrations.js`, compiled into the build output and the Docker image. The service never migrates on startup, so run the command before deploying a new version. It reads the same `db` configuration (and environment variables, including the SSL ones) as the service.
 
-1. **Schema Validation:** `npm run migration:validate` - Ensures the integrity and correctness of your Prisma schema.
-2. **Schema Formatting:**
-   - `npm run migration:format` - Formats the Prisma schema for consistency and readability.
-   - `npm run migration:format-fix` - Automatically applies formatting changes to the schema.
-3. **Migration Creation:** `npm run migration:generate <migration name>` - Creates and applies a new migration to your local development database.
+- Locally: `npm run migration:run` (or `npm run migration:run:dev` with `CONFIG_OFFLINE_MODE=true`).
+- Using Docker:
 
-   - To apply only current migration - `npm run migration:dev`
+  ```bash
+  docker run --network=host \
+    -e CONFIG_OFFLINE_MODE=true \
+    -e DB_HOST=<db_host> -e DB_PORT=<db_port> -e DB_NAME=<db_name> \
+    -e DB_USERNAME=<db_user_name> -e DB_PASSWORD=<db_password> \
+    jobnik-manager node ./db/runMigrations.js
+  ```
 
-4. **Type Generation:** `npm run migration:generate-types` - Generates and updates TypeScript types for your database models.
-
-<ins>**Production Deployment:**</ins>
-
-- **Migration Deployment:**
-  - `npm run migration:deploy` - Deploys the latest migrations to your production database.
-  - Using Docker (without SSL):
-
-    ```bash
-    docker run --network=host -e DATABASE_URL="postgresql://<db_user_name>:<db_password>@<db_host>:<db_port>/<db_name>?schema=<db_schema>" \
-    --entrypoint=npx jobnik-manager prisma migrate deploy --schema ./db/prisma/schema.prisma
-    ```
-
-    > **Note:** This command uses a non-SSL connection. SSL-enabled connection option will be available in the next version.
-
-  - **Using Docker with SSL Certificates:**
-    - To generate a PKCS#12 file from your certificates:
-
-      ```bash
-      docker run --rm -v /path/to/certs:/certs -v /path/to/output:/output \
-        --entrypoint=openssl jobnik-manager \
-        pkcs12 -export -out /output/client-identity.p12 -inkey /certs/key.pem -in /certs/cert.pem
-      ```
-
-      > **Note:** You will be prompted for an export password for the P12 file. If you need to set it non-interactively, add `-passout pass:your_password` to the command.
-
-    - To run migrations with SSL connection:
-      ```bash
-      docker run --network=host \
-        -v /path/to/certs:/certs \
-        -e DATABASE_URL="postgresql://<db_user_name>:<db_password>@<db_host>:<db_port>/<db_name>?schema=<db_schema>&sslmode=require&sslidentity=/certs/client-identity.p12&sslpassword=<your_ssl_password>" \
-        --entrypoint=npx jobnik-manager prisma migrate deploy --schema ./db/prisma/schema.prisma
-      ```
-      > **Note:** According to Prisma's documentation, when using SSL certificates, the recommended approach is to use `sslidentity` with a PKCS#12 file instead of separate cert/key files. Make sure you've created this file using the instructions in the section above.
-
-> [!CAUTION]
-> **Remember to carefully manage environment variables.**
-> Ensure that the `DATABASE_URL` environment variable is correctly configured for each environment (development, staging, production).
+  For an SSL connection, mount the certificates and add `-e DB_ENABLE_SSL_AUTH=true -e DB_CA_PATH=... -e DB_KEY_PATH=... -e DB_CERT_PATH=...`.
 
 ---
 

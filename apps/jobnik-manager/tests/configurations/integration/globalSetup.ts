@@ -1,12 +1,12 @@
 /* eslint-disable no-console */
 import path from 'node:path';
 import { upAll, downAll } from 'docker-compose';
-import { $ } from 'zx';
 import { getPort, checkPort } from 'get-port-please';
 import isCI from 'is-ci';
+import { initConnection } from '@map-colonies/drizzle-utils';
 import { initConfig, getConfig } from '../../../src/common/config';
-import { createDbConnectUrl } from '../../../src/db/helpers';
-import { createConnectionOptions, createPrismaClient } from '../../../src/db/createConnection';
+import { createDrizzle, runMigrations } from '../../../src/db/drizzle';
+import { JOB_MANAGER_SCHEMA } from '../../../src/db/entities';
 import type { Config } from './utils';
 import { getLocalTestConfig, updateLocalTestConfig } from './utils';
 
@@ -35,22 +35,22 @@ export async function setup(): Promise<void> {
   }
 
   await initConfig(true);
-  const configInstance = getConfig();
-  const dbConfig = configInstance.get('db');
-  const connectionDbUrl = createDbConnectUrl(dbConfig);
-
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  const $$ = $({ env: { ...process.env, DATABASE_URL: connectionDbUrl } });
-  await $$`node_modules/.bin/prisma migrate deploy --schema ./src/db/prisma/schema.prisma`;
+  // Same runner as the deploy-time migration command (src/db/runMigrations.ts).
+  const pool = await initConnection(getConfig().get('db'));
+  try {
+    await runMigrations(createDrizzle(pool));
+  } finally {
+    await pool.end();
+  }
 }
 
 export async function teardown(): Promise<void> {
-  const configInstance = getConfig();
-  const dbConfig = configInstance.get('db');
-  const pgPoolConfig = createConnectionOptions(dbConfig);
-  const prisma = createPrismaClient(pgPoolConfig, dbConfig.schema);
-  await prisma.$queryRaw`DROP SCHEMA IF EXISTS job_manager CASCADE`;
-  await prisma.$disconnect();
+  const pool = await initConnection(getConfig().get('db'));
+  try {
+    await pool.query(`DROP SCHEMA IF EXISTS ${JOB_MANAGER_SCHEMA} CASCADE`);
+  } finally {
+    await pool.end();
+  }
 
   if (isCI) {
     console.log('Running in CI environment, downing postgres');
