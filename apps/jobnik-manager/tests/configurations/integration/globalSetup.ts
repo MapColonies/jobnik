@@ -31,7 +31,7 @@ export async function setup(): Promise<void> {
 
   if ((await checkPort(port)) !== false) {
     // eslint-disable-next-line @typescript-eslint/naming-convention
-    await upAll({ cwd: path.join(__dirname), log: true, env: { POSTGRES_PORT: port.toString() } });
+    await upAll({ cwd: path.join(__dirname), log: true, commandOptions: ['--wait'], env: { POSTGRES_PORT: port.toString() } });
   }
 
   await initConfig(true);
