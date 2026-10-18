@@ -39,7 +39,9 @@
     "migration:generate-sql-types": "npx prisma generate --sql --schema ./src/db/prisma/schema.prisma",
     "migration:deploy": "npx prisma migrate deploy --schema ./src/db/prisma/schema.prisma",
     "migration:create": "drizzle-kit generate --config drizzle.config.mts --name",
-    "migration:run": "npm run build && cd dist && node ./db/runMigrations.js"
+    "migration:run": "npm run build && cd dist && node ./db/runMigrations.js",
+    "migration:run:dev": "npm run build && cd dist && cross-env CONFIG_OFFLINE_MODE=true node ./db/runMigrations.js",
+    "generate:check": "drizzle-kit generate --config drizzle.config.mts && test -z \"$(git status --porcelain -- src/db/migrations)\""
   },
   "directories": {
     "test": "tests"
