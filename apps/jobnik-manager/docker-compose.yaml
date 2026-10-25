@@ -10,6 +10,12 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=jobnik
+    healthcheck:
+      # Over TCP, so the socket-only server the image runs during init doesn't count as ready.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres -d jobnik']
+      interval: 1s
+      timeout: 5s
+      retries: 30
     command: postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c random_page_cost=1.0
     # Disable features to improve performance in tests
     tmpfs: /var/lib/postgresql/data

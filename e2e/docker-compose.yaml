@@ -14,7 +14,7 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - DB_NAME=jobnik
-      - DB_USER=postgres
+      - DB_USERNAME=postgres
       - DB_PASSWORD=postgres
       - DB_SCHEMA=job_manager
       - CONFIG_OFFLINE_MODE=true
@@ -42,9 +42,13 @@ services:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/jobnik?schema=job_manager
-    entrypoint: ['prisma']
-    command: ['migrate', 'deploy', '--schema', './db/prisma/schema.prisma']
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=jobnik
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=postgres
+      - CONFIG_OFFLINE_MODE=true
+    command: ['node', './db/runMigrations.js']
 
   db:
     image: postgres:14
