@@ -1,4 +1,5 @@
 import { describe, beforeEach, afterEach, it, expect, beforeAll, vi } from 'vitest';
+import type { DependencyContainer } from 'tsyringe';
 import { jsLogger } from '@map-colonies/js-logger';
 import { trace } from '@opentelemetry/api';
 import { addMinutes, subMinutes } from 'date-fns';
@@ -12,10 +13,11 @@ import { defaultStatusCounts } from '@src/stages/models/helper';
 import { TaskManager } from '@src/tasks/models/manager';
 import { createProxyMock } from '@tests/configurations/mockPrisma';
 import { TaskOperationStatus, StageOperationStatus, JobOperationStatus } from '@src/db/persistenceModel';
-import { createJobnikTree, truncateAllTables } from '../common/utils';
+import { createJobnikTree, endDatabasePool, truncateAllTables } from '../common/utils';
 
 describe('TaskSweeper', () => {
   let prisma: PrismaClient;
+  let container: DependencyContainer;
   let taskManager: TaskManager;
 
   beforeAll(async function () {
@@ -23,7 +25,7 @@ describe('TaskSweeper', () => {
   });
 
   beforeEach(async function () {
-    const [, container] = await getApp({
+    [, container] = await getApp({
       override: [
         { token: SERVICES.LOGGER, provider: { useValue: jsLogger({ enabled: false }) } },
         { token: SERVICES.TRACER, provider: { useValue: trace.getTracer('testTracer') } },
@@ -40,6 +42,7 @@ describe('TaskSweeper', () => {
 
   afterEach(async function () {
     await prisma.$disconnect();
+    await endDatabasePool(container);
     vi.resetModules();
   });
 

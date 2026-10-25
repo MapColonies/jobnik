@@ -1,5 +1,5 @@
 import type { components, operations, JobId, StageId } from 'jobnik-openapi';
-import type { JobPrismaObject } from '@src/jobs/models/models';
+import type { JobRow } from '@src/jobs/models/models';
 import type { PrismaTransaction } from '@src/db/types';
 import type { Job, Stage, Task, TaskOperationStatus } from '@src/db/persistenceModel';
 
@@ -14,7 +14,7 @@ type StagesPaginatedResponse = components['schemas']['stagesPaginatedResponse'];
  * handling and silently drops Json overrides for later models). Move this branding into
  * schema.prisma once that upstream bug is fixed.
  */
-type StageIncludingJob = Omit<StagePrismaObject, 'id' | 'jobId'> & { id: StageId; jobId: JobId; job: JobPrismaObject };
+type StageIncludingJob = Omit<StagePrismaObject, 'id' | 'jobId'> & { id: StageId; jobId: JobId; job: JobRow };
 interface UpdateSummaryCount {
   add: { status: TaskOperationStatus; count: number };
   remove?: { status: TaskOperationStatus; count: number };

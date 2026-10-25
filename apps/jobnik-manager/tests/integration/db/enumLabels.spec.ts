@@ -1,4 +1,5 @@
 import { describe, beforeAll, afterAll, it, expect } from 'vitest';
+import type { DependencyContainer } from 'tsyringe';
 import { jsLogger } from '@map-colonies/js-logger';
 import { trace } from '@opentelemetry/api';
 import { type PrismaClient } from '@prismaClient';
@@ -6,13 +7,15 @@ import { getApp } from '@src/app';
 import { SERVICES } from '@common/constants';
 import { initConfig } from '@src/common/config';
 import { JobOperationStatus, Priority, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
+import { endDatabasePool } from '../common/utils';
 
 describe('database enum labels', () => {
   let prisma: PrismaClient;
+  let container: DependencyContainer;
 
   beforeAll(async function () {
     await initConfig(true);
-    const [, container] = await getApp({
+    [, container] = await getApp({
       override: [
         { token: SERVICES.LOGGER, provider: { useValue: jsLogger({ enabled: false }) } },
         { token: SERVICES.TRACER, provider: { useValue: trace.getTracer('testTracer') } },
@@ -25,6 +28,7 @@ describe('database enum labels', () => {
 
   afterAll(async function () {
     await prisma.$disconnect();
+    await endDatabasePool(container);
   });
 
   it.each([

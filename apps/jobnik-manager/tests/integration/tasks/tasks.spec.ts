@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { describe, beforeEach, afterEach, it, expect, beforeAll, vi } from 'vitest';
+import type { DependencyContainer } from 'tsyringe';
 import { jsLogger } from '@map-colonies/js-logger';
 import { trace } from '@opentelemetry/api';
 import { StatusCodes } from 'http-status-codes';
@@ -34,7 +35,7 @@ import { createProxyMock } from '@tests/configurations/mockPrisma';
 import { JobOperationStatus, Priority, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 import { createJobRequestBody } from '../jobs/helpers';
 import { addJobRecord, addStageRecord, createStageBody } from '../stages/helpers';
-import { createJobnikTree, createMockPrismaError, createMockUnknownDbError, truncateAllTables } from '../common/utils';
+import { createJobnikTree, createMockPrismaError, createMockUnknownDbError, endDatabasePool, truncateAllTables } from '../common/utils';
 import { createTaskBody, createTaskRecords } from './helpers';
 
 const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(expect);
@@ -42,6 +43,7 @@ const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(e
 describe('task', function () {
   let requestSender: RequestSender<paths, operations>;
   let prisma: PrismaClient;
+  let container: DependencyContainer;
 
   const memoryExporter = new InMemorySpanExporter();
   const spanProcessor = new SimpleSpanProcessor(memoryExporter);
@@ -53,7 +55,8 @@ describe('task', function () {
   });
 
   beforeEach(async function () {
-    const [app, container] = await getApp({
+    let app;
+    [app, container] = await getApp({
       override: [
         { token: SERVICES.LOGGER, provider: { useValue: jsLogger({ enabled: false }) } },
         { token: SERVICES.TRACER, provider: { useValue: trace.getTracer('testTracer') } },
@@ -70,6 +73,7 @@ describe('task', function () {
 
   afterEach(async function () {
     await prisma.$disconnect();
+    await endDatabasePool(container);
     memoryExporter.reset();
   });
 

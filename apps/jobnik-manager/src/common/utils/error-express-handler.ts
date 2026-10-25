@@ -1,5 +1,6 @@
 import type { NextFunction, ErrorRequestHandler } from 'express';
 import { StatusCodes, getReasonPhrase } from 'http-status-codes';
+import { isDrizzleQueryError } from '@map-colonies/drizzle-utils';
 
 /**
  * Represents an HTTP error that extends the standard Error object.
@@ -63,7 +64,9 @@ export function getErrorHandlerMiddleware(): ErrorRequestHandler {
       err.code = 'VALIDATION_ERROR';
     }
 
-    if ('isPrismaError' in err && err.isPrismaError === true) {
+    // Annotated so the guard doesn't narrow `err` away from HttpError.
+    const isDatabaseError: boolean = isDrizzleQueryError(err) || ('isPrismaError' in err && err.isPrismaError === true);
+    if (isDatabaseError) {
       err.code = 'DATABASE_RELATED_ERROR';
     }
 

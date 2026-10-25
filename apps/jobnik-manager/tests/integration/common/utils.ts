@@ -1,8 +1,11 @@
 import { faker } from '@faker-js/faker';
 import { type Snapshot } from 'xstate';
-import type { Prisma, PrismaClient } from '@prismaClient';
+import type { DependencyContainer } from 'tsyringe';
+import type { Pool } from 'pg';
+import type { Job as PrismaJob, Prisma, PrismaClient } from '@prismaClient';
 import type { JobCreateModel } from '@src/jobs/models/models';
-import type { JobOperationStatus, Job, Stage, Task } from '@src/db/persistenceModel';
+import { SERVICES } from '@common/constants';
+import type { JobOperationStatus, Stage, Task } from '@src/db/persistenceModel';
 import { createJobRecord, createJobRequestBody } from '../jobs/helpers';
 import { createStageBody, addStageRecord } from '../stages/helpers';
 import { createTaskBody, createTaskRecords } from '../tasks/helpers';
@@ -103,6 +106,17 @@ export async function truncateAllTables(prisma: PrismaClient): Promise<void> {
 }
 
 /**
+ * Closes the app's database pool, so every following query of the app fails. Safe to call more than once.
+ * @param container - the app's dependency container
+ */
+export async function endDatabasePool(container: DependencyContainer): Promise<void> {
+  const pool = container.resolve<Pool>(SERVICES.PG_POOL);
+  if (!pool.ended) {
+    await pool.end();
+  }
+}
+
+/**
  * Creates a mock Prisma error for testing purposes.
  * Default message is 'Database error'.
  * The error is marked with a custom property to simulate a Prisma error.
@@ -130,7 +144,8 @@ export function createMockUnknownDbError(): Error {
 
 // Type definitions using inheritance - cleaner hierarchy
 export interface JobOnlyTree {
-  readonly job: Job;
+  // Still a Prisma row: the fixtures are written through Prisma until the integration setup moves to Drizzle.
+  readonly job: PrismaJob;
 }
 
 export interface JobWithStageTree extends JobOnlyTree {

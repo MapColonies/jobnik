@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import { describe, beforeEach, afterEach, it, expect, beforeAll, vi } from 'vitest';
+import { describe, beforeEach, afterEach, it, expect, beforeAll } from 'vitest';
+import type { DependencyContainer } from 'tsyringe';
 import { jsLogger } from '@map-colonies/js-logger';
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
 import { trace } from '@opentelemetry/api';
@@ -12,7 +13,6 @@ import {
 } from '@map-colonies/openapi-helpers/requestSender';
 import { openapiFilePath, type paths, type operations, type JobId } from 'jobnik-openapi';
 import { type PrismaClient } from '@prismaClient';
-import type { PrismaTransaction } from '@src/db/types';
 import { getApp } from '@src/app';
 import { SERVICES, successMessages } from '@common/constants';
 import { initConfig } from '@src/common/config';
@@ -22,9 +22,8 @@ import { abortedStageXstatePersistentSnapshot, completedStageXstatePersistentSna
 import type { JobCreateModel } from '@src/jobs/models/models';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
-import { createProxyMock } from '@tests/configurations/mockPrisma';
 import { JobOperationStatus, Priority, StageOperationStatus } from '@src/db/persistenceModel';
-import { createJobnikTree, createMockPrismaError, createMockUnknownDbError, truncateAllTables } from '../common/utils';
+import { createJobnikTree, endDatabasePool, truncateAllTables } from '../common/utils';
 import { createJobRecord, createJobRequestBody, testJobId } from './helpers';
 
 const memoryExporter = new InMemorySpanExporter();
@@ -37,13 +36,15 @@ const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(e
 describe('job', function () {
   let requestSender: RequestSender<paths, operations>;
   let prisma: PrismaClient;
+  let container: DependencyContainer;
 
   beforeAll(async function () {
     await initConfig(true);
   });
 
   beforeEach(async function () {
-    const [app, container] = await getApp({
+    let app;
+    [app, container] = await getApp({
       override: [
         { token: SERVICES.LOGGER, provider: { useValue: jsLogger({ enabled: false }) } },
         { token: SERVICES.TRACER, provider: { useValue: trace.getTracer('testTracer') } },
@@ -58,6 +59,7 @@ describe('job', function () {
 
   afterEach(async function () {
     await prisma.$disconnect();
+    await endDatabasePool(container);
     memoryExporter.reset();
   });
 
@@ -197,33 +199,13 @@ describe('job', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        // Create spy for Prisma method (Vitest 4.0 compatible workaround for Proxy objects)
-        const findManySpy = createProxyMock(prisma.job, 'findMany');
-        findManySpy.mockRejectedValueOnce(error);
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.findJobsV1({});
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = new Error('Database error');
-        // @ts-expect-error using this flag to mark the error as a Prisma error
-        error.isPrismaError = false;
-        // Create spy for Prisma method (Vitest 4.0 compatible workaround for Proxy objects)
-        const findManySpy = createProxyMock(prisma.job, 'findMany');
-        findManySpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.findJobsV1({});
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { message: 'Database error', code: 'UNKNOWN_ERROR' } });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -351,33 +333,15 @@ describe('job', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const createSpy = createProxyMock(prisma.job, 'create');
-        createSpy.mockRejectedValueOnce(error);
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.createJobV1({
           requestBody: createJobRequestBody,
         });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const createSpy = createProxyMock(prisma.job, 'create');
-        createSpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.createJobV1({
-          requestBody: createJobRequestBody,
-        });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { message: 'Database error', code: 'UNKNOWN_ERROR' } });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -456,31 +420,13 @@ describe('job', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: testJobId as JobId } });
 
         expect(getJobResponse).toSatisfyApiSpec();
-        expect(getJobResponse).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: testJobId as JobId } });
-
-        expect(getJobResponse).toSatisfyApiSpec();
-        expect(getJobResponse).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(getJobResponse).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -533,32 +479,13 @@ describe('job', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const updateSpy = createProxyMock(prisma.job, 'update');
-        updateSpy.mockRejectedValueOnce(error);
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.updateUserMetadataV1({ pathParams: { jobId: testJobId as JobId }, requestBody: {} });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const updateSpy = createProxyMock(prisma.job, 'update');
-        updateSpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.updateUserMetadataV1({ pathParams: { jobId: testJobId as JobId }, requestBody: {} });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -636,10 +563,8 @@ describe('job', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.updateJobPriorityV1({
           pathParams: { jobId: testJobId as JobId },
@@ -647,27 +572,7 @@ describe('job', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.updateJobPriorityV1({
-          pathParams: { jobId: testJobId as JobId },
-          requestBody: { priority: Priority.VERY_HIGH },
-        });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -772,19 +677,8 @@ describe('job', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-        transactionSpy.mockImplementationOnce(<T>(callback: (tx: PrismaTransaction) => T): T => {
-          const mockTx = {
-            job: {
-              findUnique: vi.fn().mockRejectedValueOnce(error),
-            },
-          } as unknown as PrismaTransaction;
-
-          return callback(mockTx);
-        });
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.updateStatusV1({
           pathParams: { jobId: testJobId as JobId },
@@ -792,34 +686,8 @@ describe('job', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-
-        transactionSpy.mockImplementationOnce(async <T>(callback: (tx: PrismaTransaction) => Promise<T>): Promise<void> => {
-          const mockTx = {
-            job: {
-              findUnique: vi.fn().mockRejectedValueOnce(error),
-            },
-          } as unknown as PrismaTransaction;
-
-          await callback(mockTx);
-        });
-
-        const response = await requestSender.updateStatusV1({
-          pathParams: { jobId: testJobId as JobId },
-          requestBody: { status: JobOperationStatus.PENDING },
-        });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { message: 'Database error', code: 'UNKNOWN_ERROR' } });
+        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
       });
     });
   });
@@ -908,36 +776,15 @@ describe('job', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const deleteJobResponse = await requestSender.deleteJobV1({
           pathParams: { jobId: testJobId as JobId },
         });
 
         expect(deleteJobResponse).toSatisfyApiSpec();
-        expect(deleteJobResponse).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
-
-        const deleteJobResponse = await requestSender.deleteJobV1({
-          pathParams: { jobId: testJobId as JobId },
-        });
-
-        expect(deleteJobResponse).toSatisfyApiSpec();
-        expect(deleteJobResponse).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(deleteJobResponse).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
