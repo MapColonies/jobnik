@@ -58,11 +58,11 @@ const taskStateMachine = setup({
 /**
  * Updates the task machine state based on the provided status and xstate snapshot.
  * @param {TaskOperationStatus} status - The new status to set.
- * @param {PrismaJson.PersistenceSnapshot} xstate - The current xstate snapshot.
+ * @param {Snapshot<unknown>} xstate - The current xstate snapshot.
  * @returns {Snapshot<unknown>} - The updated xstate snapshot.
  * @throws {IllegalTaskStatusTransitionError} - If the status change is invalid.
  */
-function updateTaskMachineState(status: TaskOperationStatus, xstate: PrismaJson.PersistenceSnapshot): Snapshot<unknown> {
+function updateTaskMachineState(status: TaskOperationStatus, xstate: Snapshot<unknown>): Snapshot<unknown> {
   const updateActor = createActor(taskStateMachine, { snapshot: xstate }).start();
 
   const nextStatusChange = OperationStatusMapper[status];
