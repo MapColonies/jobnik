@@ -1,6 +1,6 @@
+// Declares the JSON column types of the Prisma generated client, which is no longer used at runtime and is removed together with it.
 import type { Snapshot } from 'xstate';
 import type { components } from 'jobnik-openapi';
-import type { Prisma } from '@prismaClient';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -13,5 +13,3 @@ declare global {
     type PersistenceSnapshot = Snapshot<unknown>;
   }
 }
-
-export type PrismaTransaction = Prisma.TransactionClient;

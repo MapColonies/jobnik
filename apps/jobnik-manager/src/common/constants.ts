@@ -9,7 +9,6 @@ type SuccessMessagesObj = {
 
 export const SERVICE_NAME = readPackageJsonSync().name ?? 'unknown_service';
 export const DB_CONNECTION_TIMEOUT = 20000;
-export const TX_TIMEOUT_MS = 30000;
 export const NODE_VERSION = process.versions.node;
 
 export const IGNORED_OUTGOING_TRACE_ROUTES = [/^.*\/v1\/metrics.*$/];
@@ -22,7 +21,6 @@ export const SERVICES = {
   TRACER: Symbol('Tracer'),
   METRICS: Symbol('METRICS'),
   SERVICE_METRICS: Symbol('SERVICE_METRICS'),
-  PRISMA: Symbol('Prisma'),
   PG_POOL: Symbol('PgPool'),
   DRIZZLE: Symbol('Drizzle'),
   HEALTHCHECK: Symbol('Healthcheck'),

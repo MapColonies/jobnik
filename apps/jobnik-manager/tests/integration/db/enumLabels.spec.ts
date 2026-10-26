@@ -2,7 +2,8 @@ import { describe, beforeAll, afterAll, it, expect } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
 import { jsLogger } from '@map-colonies/js-logger';
 import { trace } from '@opentelemetry/api';
-import { type PrismaClient } from '@prismaClient';
+import { sql } from 'drizzle-orm';
+import type { Drizzle } from '@src/db/drizzle';
 import { getApp } from '@src/app';
 import { SERVICES } from '@common/constants';
 import { initConfig } from '@src/common/config';
@@ -10,7 +11,7 @@ import { JobOperationStatus, Priority, StageOperationStatus, TaskOperationStatus
 import { endDatabasePool } from '../common/utils';
 
 describe('database enum labels', () => {
-  let prisma: PrismaClient;
+  let drizzle: Drizzle;
   let container: DependencyContainer;
 
   beforeAll(async function () {
@@ -23,11 +24,10 @@ describe('database enum labels', () => {
       useChild: true,
     });
 
-    prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
+    drizzle = container.resolve<Drizzle>(SERVICES.DRIZZLE);
   });
 
   afterAll(async function () {
-    await prisma.$disconnect();
     await endDatabasePool(container);
   });
 
@@ -37,13 +37,13 @@ describe('database enum labels', () => {
     ['task_operation_status_enum', TaskOperationStatus],
     ['priority_enum', Priority],
   ])('should store %s labels as the uppercase names the code uses', async (enumName, codeEnum) => {
-    const labels = await prisma.$queryRaw<{ enumlabel: string }[]>`
+    const { rows: labels } = await drizzle.execute<{ enumlabel: string }>(sql`
       SELECT e.enumlabel::text AS enumlabel
       FROM pg_enum e
       INNER JOIN pg_type t ON e.enumtypid = t.oid
       INNER JOIN pg_namespace n ON t.typnamespace = n.oid
       WHERE n.nspname = 'job_manager' AND t.typname = ${enumName}
-    `;
+    `);
 
     expect(labels.map((label) => label.enumlabel).sort()).toEqual(Object.values(codeEnum).sort());
   });

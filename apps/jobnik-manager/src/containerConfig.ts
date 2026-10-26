@@ -6,15 +6,12 @@ import { jsLogger } from '@map-colonies/js-logger';
 import { instanceCachingFactory, instancePerContainerCachingFactory } from 'tsyringe';
 import type { HealthCheck } from '@godaddy/terminus';
 import type { Pool } from 'pg';
-import { initConnection } from '@map-colonies/drizzle-utils';
-import type { PrismaClient } from '@prismaClient';
+import { healthCheck, initConnection } from '@map-colonies/drizzle-utils';
 import { type InjectionObject, registerDependencies } from '@common/dependencyRegistration';
 import { DB_CONNECTION_TIMEOUT, ROUTERS, SERVICES, SERVICE_NAME } from '@common/constants';
 import { getTracing } from '@common/tracing';
 import { getConfig } from './common/config';
-import { createConnectionOptions, createPrismaClient } from './db/createConnection';
 import { createDrizzle } from './db/drizzle';
-import { promiseTimeout } from './common/utils/promiseTimeout';
 import { SERVICE_METRICS_SYMBOL, serviceMetricsFactory } from './common/serviceMetrics';
 import { jobV1RouterFactory } from './api/v1/jobs/router';
 import { stageV1RouterFactory } from './api/v1/stages/router';
@@ -40,24 +37,12 @@ export const registerExternalValues = async (options?: RegisterOptions): Promise
 
   configInstance.initializeMetrics(metricsRegistry);
 
-  const prismaClientConfig = createConnectionOptions(dbConfig);
-
   let pool: Pool;
   try {
     pool = await initConnection(dbConfig);
   } catch (error) {
     throw new Error('Failed to connect to the database', { cause: error });
   }
-
-  /* v8 ignore next 7 -- @preserve */
-  const healthCheck = (prisma: PrismaClient): HealthCheck => {
-    return async (): Promise<void> => {
-      const check = prisma.$queryRaw`SELECT 1`.then(() => {
-        return;
-      });
-      return promiseTimeout<void>(DB_CONNECTION_TIMEOUT, check);
-    };
-  };
 
   const dependencies: InjectionObject<unknown>[] = [
     { token: SERVICES.CONFIG, provider: { useValue: configInstance } },
@@ -66,14 +51,6 @@ export const registerExternalValues = async (options?: RegisterOptions): Promise
     { token: SERVICES.METRICS, provider: { useValue: metricsRegistry } },
     { token: SERVICES.SERVICE_METRICS, provider: { useValue: serviceMetricsRegistry } },
     { token: SERVICE_METRICS_SYMBOL, provider: { useFactory: serviceMetricsFactory } },
-    {
-      token: SERVICES.PRISMA,
-      provider: {
-        useFactory: instancePerContainerCachingFactory(() => {
-          return createPrismaClient(prismaClientConfig, dbConfig.schema);
-        }),
-      },
-    },
     { token: SERVICES.PG_POOL, provider: { useValue: pool } },
     {
       token: SERVICES.DRIZZLE,
@@ -86,10 +63,9 @@ export const registerExternalValues = async (options?: RegisterOptions): Promise
     {
       token: SERVICES.HEALTHCHECK,
       provider: {
-        /* v8 ignore next 4 -- @preserve */
-        useFactory: instanceCachingFactory((container) => {
-          const prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
-          return healthCheck(prisma);
+        /* v8 ignore next 3 -- @preserve */
+        useFactory: instanceCachingFactory((container): HealthCheck => {
+          return healthCheck(container.resolve<Pool>(SERVICES.PG_POOL), DB_CONNECTION_TIMEOUT);
         }),
       },
     },

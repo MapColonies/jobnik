@@ -27,7 +27,7 @@ const defaultStatusCounts = Object.fromEntries(Object.values(summaryCountsMapper
 
 /**
  * This function converts a stage row to a StageModel API object.
- * @param stageRow db entity
+ * @param stageRow stage row
  * @returns StageModel
  */
 function convertStageRowToResponse(stageRow: StageRow): StageModel {
@@ -44,7 +44,7 @@ function convertStageRowToResponse(stageRow: StageRow): StageModel {
 
 /**
  * This function converts an array of stage rows to an array of StageModel API objects.
- * @param stageRows array of db entities
+ * @param stageRows array of stage rows
  * @returns array of StageModel
  */
 function convertArrayStageRowToResponse(stageRows: StageRow[]): StageModel[] {

@@ -93,7 +93,7 @@ export class JobManager {
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
     });
 
-    const job = await this.getJobEntityById(jobId, { includeStages });
+    const job = await this.getJobRowById(jobId, { includeStages });
 
     if (!job) {
       throw new JobNotFoundError(jobsErrorMessages.jobNotFound);
@@ -122,7 +122,7 @@ export class JobManager {
       [INFRA_CONVENTIONS.infra.jobnik.job.priority]: priority,
     });
 
-    const job = await this.getJobEntityById(jobId);
+    const job = await this.getJobRowById(jobId);
 
     if (!job) {
       throw new JobNotFoundError(jobsErrorMessages.jobNotFound);
@@ -157,7 +157,7 @@ export class JobManager {
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
     });
 
-    const job = await this.getJobEntityById(jobId);
+    const job = await this.getJobRowById(jobId);
 
     if (!job) {
       throw new JobNotFoundError(jobsErrorMessages.jobNotFound);
@@ -173,13 +173,13 @@ export class JobManager {
   }
 
   /**
-   * This method is used to get a job entity by its id from the database.
+   * This method is used to get a job row by its id from the database.
    * @param jobId unique identifier of the job.
    * @param options Configuration options for the query
-   * @returns The job entity if found, otherwise null.
+   * @returns The job row if found, otherwise null.
    */
   @withSpanAsyncV4
-  public async getJobEntityById<IncludeStages extends boolean = false>(
+  public async getJobRowById<IncludeStages extends boolean = false>(
     jobId: JobId,
     options: { includeStages?: IncludeStages; tx?: DrizzleTx } = {}
   ): Promise<JobRow<IncludeStages> | undefined> {
@@ -193,7 +193,7 @@ export class JobManager {
 
   @withSpanAsyncV4
   private async executeUpdateStatus(jobId: JobId, status: JobOperationStatus, tx: DrizzleTx): Promise<void> {
-    const job = await this.getJobEntityById(jobId, { tx });
+    const job = await this.getJobRowById(jobId, { tx });
 
     if (!job) {
       throw new JobNotFoundError(jobsErrorMessages.jobNotFound);

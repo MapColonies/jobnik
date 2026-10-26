@@ -2,10 +2,11 @@ import { faker } from '@faker-js/faker';
 import { type Snapshot } from 'xstate';
 import type { DependencyContainer } from 'tsyringe';
 import type { Pool } from 'pg';
-import type { Job as PrismaJob, Stage as PrismaStage, Prisma, PrismaClient } from '@prismaClient';
+import { sql } from 'drizzle-orm';
 import type { JobCreateModel } from '@src/jobs/models/models';
 import { SERVICES } from '@common/constants';
-import type { JobOperationStatus, Task } from '@src/db/persistenceModel';
+import type { Job, JobOperationStatus, NewStage, NewTask, Stage, Task } from '@src/db/persistenceModel';
+import type { Drizzle } from '@src/db/drizzle';
 import { createJobRecord, createJobRequestBody } from '../jobs/helpers';
 import { createStageBody, addStageRecord } from '../stages/helpers';
 import { createTaskBody, createTaskRecords } from '../tasks/helpers';
@@ -23,37 +24,37 @@ type JobTestCreateModel = JobCreateModel & {
 
 // Overload 1: Job only (no stage, no tasks)
 export async function createJobnikTree(
-  prisma: PrismaClient,
+  drizzle: Drizzle,
   jobOverrides: Partial<JobTestCreateModel>,
-  stageOverrides: Partial<Prisma.StageCreateManyInput>,
-  tasksOverrides: Partial<Prisma.TaskCreateManyInput>[],
+  stageOverrides: Partial<NewStage>,
+  tasksOverrides: Partial<NewTask>[],
   options: { createStage: false; createTasks?: false }
 ): Promise<JobOnlyTree>;
 
 // Overload 2: Job with stage only (no tasks)
 export async function createJobnikTree(
-  prisma: PrismaClient,
+  drizzle: Drizzle,
   jobOverrides: Partial<JobTestCreateModel>,
-  stageOverrides: Partial<Prisma.StageCreateManyInput>,
-  tasksOverrides: Partial<Prisma.TaskCreateManyInput>[],
+  stageOverrides: Partial<NewStage>,
+  tasksOverrides: Partial<NewTask>[],
   options: { createStage: true; createTasks: false }
 ): Promise<JobWithStageTree>;
 
 // Overload 3: Full tree (job, stage, and tasks) - default behavior
 export async function createJobnikTree(
-  prisma: PrismaClient,
+  drizzle: Drizzle,
   jobOverrides?: Partial<JobTestCreateModel>,
-  stageOverrides?: Partial<Prisma.StageCreateManyInput>,
-  tasksOverrides?: Partial<Prisma.TaskCreateManyInput>[],
+  stageOverrides?: Partial<NewStage>,
+  tasksOverrides?: Partial<NewTask>[],
   options?: { createStage?: true; createTasks?: true }
 ): Promise<FullJobnikTree>;
 
 // Implementation
 export async function createJobnikTree(
-  prisma: PrismaClient,
+  drizzle: Drizzle,
   jobOverrides: Partial<JobTestCreateModel> = {},
-  stageOverrides: Partial<Prisma.StageCreateManyInput> = {},
-  tasksOverrides: Partial<Prisma.TaskCreateManyInput>[] = [{}],
+  stageOverrides: Partial<NewStage> = {},
+  tasksOverrides: Partial<NewTask>[] = [{}],
   options: {
     createStage?: boolean;
     createTasks?: boolean;
@@ -63,7 +64,7 @@ export async function createJobnikTree(
 
   // Create job with overrides
   const jobData = { ...createJobRequestBody, id: faker.string.uuid(), ...jobOverrides };
-  const job = await createJobRecord(jobData, prisma);
+  const job = await createJobRecord(jobData, drizzle);
 
   // Job only scenario
   if (!createStage) {
@@ -76,7 +77,7 @@ export async function createJobnikTree(
     jobId: job.id,
     ...stageOverrides,
   };
-  const stage = await addStageRecord(stageData, prisma);
+  const stage = await addStageRecord(stageData, drizzle);
 
   // Job with stage only scenario
   if (!createTasks) {
@@ -90,7 +91,7 @@ export async function createJobnikTree(
     stageId: stage.id,
     ...taskOverride,
   }));
-  const tasks = await createTaskRecords(tasksData, prisma);
+  const tasks = await createTaskRecords(tasksData, drizzle);
 
   return { job, stage, tasks };
 }
@@ -101,8 +102,8 @@ export async function createJobnikTree(
  * rows left behind by a previous test (e.g. `cleanStaleTasks` or unscoped "list all" queries
  * picking up unrelated leftover data), causing flaky assertions.
  */
-export async function truncateAllTables(prisma: PrismaClient): Promise<void> {
-  await prisma.$executeRaw`TRUNCATE TABLE "job_manager"."job" RESTART IDENTITY CASCADE`;
+export async function truncateAllTables(drizzle: Drizzle): Promise<void> {
+  await drizzle.execute(sql`TRUNCATE TABLE "job_manager"."job" RESTART IDENTITY CASCADE`);
 }
 
 /**
@@ -118,12 +119,11 @@ export async function endDatabasePool(container: DependencyContainer): Promise<v
 
 // Type definitions using inheritance - cleaner hierarchy
 export interface JobOnlyTree {
-  // Still Prisma rows: the fixtures are written through Prisma until the integration setup moves to Drizzle.
-  readonly job: PrismaJob;
+  readonly job: Job;
 }
 
 export interface JobWithStageTree extends JobOnlyTree {
-  readonly stage: PrismaStage;
+  readonly stage: Stage;
 }
 
 export interface FullJobnikTree extends JobWithStageTree {
