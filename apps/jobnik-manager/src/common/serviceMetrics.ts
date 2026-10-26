@@ -3,29 +3,23 @@ import type { Logger } from '@map-colonies/js-logger';
 import type { FactoryFunction } from 'tsyringe';
 import type { Registry } from 'prom-client';
 import { Gauge } from 'prom-client';
-import type { PrismaClient } from '@prismaClient';
+import { count, eq } from 'drizzle-orm';
 import { SERVICES } from '@common/constants';
 import { TaskOperationStatus, StageOperationStatus, JobOperationStatus } from '@src/db/persistenceModel';
+import type { Drizzle } from '@src/db/drizzle';
+import { jobTable, stageTable, taskTable } from '@src/db/entities';
 
 /**
  * Get count of jobs by all statuses
  */
-const getJobCountsByStatus = async (prisma: PrismaClient): Promise<{ job_status: string; count: number }[]> => {
+const getJobCountsByStatus = async (drizzle: Drizzle): Promise<{ job_status: string; count: number }[]> => {
   if (process.env.NODE_ENV === 'test') return [];
 
   try {
-    const statusCounts = await prisma.job.groupBy({
-      by: ['status'],
-      _count: {
-        id: true,
-      },
-    });
-
-    // Convert to result format
-    const results: { job_status: string; count: number }[] = statusCounts.map((item) => ({
-      job_status: item.status,
-      count: item._count.id,
-    }));
+    const results: { job_status: string; count: number }[] = await drizzle
+      .select({ job_status: jobTable.status, count: count() })
+      .from(jobTable)
+      .groupBy(jobTable.status);
 
     // Ensure all statuses are represented
     const allStatuses = Object.values(JobOperationStatus);
@@ -49,63 +43,29 @@ const getJobCountsByStatus = async (prisma: PrismaClient): Promise<{ job_status:
 /**
  * Get count of stages by all statuses and stage type
  */
-const getStageCountsByStatus = async (prisma: PrismaClient): Promise<{ stage_status: string; stage_type: string; count: number }[]> => {
+const getStageCountsByStatus = async (drizzle: Drizzle): Promise<{ stage_status: string; stage_type: string; count: number }[]> => {
   if (process.env.NODE_ENV === 'test') return [];
 
   try {
-    // Get all stages with their type information
-    const stages = await prisma.stage.findMany({
-      select: {
-        id: true,
-        status: true,
-        type: true,
-      },
-    });
+    const results: { stage_status: string; stage_type: string; count: number }[] = await drizzle
+      .select({ stage_status: stageTable.status, stage_type: stageTable.type, count: count() })
+      .from(stageTable)
+      .groupBy(stageTable.status, stageTable.type);
 
-    // Extract unique stage types from the data we already have
-    const uniqueStageTypes = [...new Set(stages.map((stage) => stage.type))];
-
-    // Group by status and stage type
-    const groupCounts: { [key: string]: number } = {};
-
-    for (const stage of stages) {
-      const key = `${stage.status}-${stage.type}`;
-      const currentCount = groupCounts[key] ?? 0;
-      groupCounts[key] = currentCount + 1;
-    }
-
-    // Convert to result format
-    const results: { stage_status: string; stage_type: string; count: number }[] = [];
-
-    for (const [key, count] of Object.entries(groupCounts)) {
-      const parts = key.split('-');
-      const stage_status = parts[0];
-      const stage_type = parts.slice(1).join('-'); // Handle stage types that might contain dashes
-
-      if (stage_status !== undefined && stage_status !== '') {
-        results.push({
-          stage_status,
-          stage_type,
-          count,
-        });
-      }
-    }
+    const uniqueStageTypes = [...new Set(results.map((result) => result.stage_type))];
 
     // Ensure all combinations of status and stage type are represented
     const allStatuses = Object.values(StageOperationStatus);
 
-    // Only create matrix if we have actual stage types
-    if (uniqueStageTypes.length > 0) {
-      for (const stage_status of allStatuses) {
-        for (const stage_type of uniqueStageTypes) {
-          const existing = results.find((r) => r.stage_status === stage_status && r.stage_type === stage_type);
-          if (!existing) {
-            results.push({
-              stage_status,
-              stage_type,
-              count: 0,
-            });
-          }
+    for (const stage_status of allStatuses) {
+      for (const stage_type of uniqueStageTypes) {
+        const existing = results.find((r) => r.stage_status === stage_status && r.stage_type === stage_type);
+        if (!existing) {
+          results.push({
+            stage_status,
+            stage_type,
+            count: 0,
+          });
         }
       }
     }
@@ -119,68 +79,30 @@ const getStageCountsByStatus = async (prisma: PrismaClient): Promise<{ stage_sta
 /**
  * Get count of tasks by all statuses and stage type
  */
-const getTaskCountsByStatus = async (prisma: PrismaClient): Promise<{ task_status: string; stage_type: string; count: number }[]> => {
+const getTaskCountsByStatus = async (drizzle: Drizzle): Promise<{ task_status: string; stage_type: string; count: number }[]> => {
   if (process.env.NODE_ENV === 'test') return [];
 
   try {
-    // Get all tasks with their stage information
-    const tasksWithStages = await prisma.task.findMany({
-      select: {
-        id: true,
-        status: true,
-        stage: {
-          select: {
-            type: true,
-          },
-        },
-      },
-    });
+    const results: { task_status: string; stage_type: string; count: number }[] = await drizzle
+      .select({ task_status: taskTable.status, stage_type: stageTable.type, count: count() })
+      .from(taskTable)
+      .innerJoin(stageTable, eq(taskTable.stageId, stageTable.id))
+      .groupBy(taskTable.status, stageTable.type);
 
-    // Extract unique stage types from the data we already have
-    const uniqueStageTypes = [...new Set(tasksWithStages.map((task) => task.stage.type))];
-
-    // Group by status and stage type
-    const groupCounts: { [key: string]: number } = {};
-
-    for (const task of tasksWithStages) {
-      const stage_type = task.stage.type;
-      const key = `${task.status}-${stage_type}`;
-      const currentCount = groupCounts[key] ?? 0;
-      groupCounts[key] = currentCount + 1;
-    }
-
-    // Convert to result format
-    const results: { task_status: string; stage_type: string; count: number }[] = [];
-
-    for (const [key, count] of Object.entries(groupCounts)) {
-      const parts = key.split('-');
-      const task_status = parts[0];
-      const stage_type = parts.slice(1).join('-'); // Handle stage types that might contain dashes
-
-      if (task_status !== undefined && task_status !== '') {
-        results.push({
-          task_status,
-          stage_type,
-          count,
-        });
-      }
-    }
+    const uniqueStageTypes = [...new Set(results.map((result) => result.stage_type))];
 
     // Ensure all combinations of status and stage type are represented
     const allStatuses = Object.values(TaskOperationStatus);
 
-    // Only create matrix if we have actual stage types
-    if (uniqueStageTypes.length > 0) {
-      for (const status of allStatuses) {
-        for (const stage_type of uniqueStageTypes) {
-          const existing = results.find((r) => r.task_status === status && r.stage_type === stage_type);
-          if (!existing) {
-            results.push({
-              task_status: status,
-              stage_type,
-              count: 0,
-            });
-          }
+    for (const status of allStatuses) {
+      for (const stage_type of uniqueStageTypes) {
+        const existing = results.find((r) => r.task_status === status && r.stage_type === stage_type);
+        if (!existing) {
+          results.push({
+            task_status: status,
+            stage_type,
+            count: 0,
+          });
         }
       }
     }
@@ -195,36 +117,19 @@ const getTaskCountsByStatus = async (prisma: PrismaClient): Promise<{ task_statu
  * Get queue depth by stage type and priority using database-level aggregation
  */
 const getTaskQueueDepthByStageType = async (
-  prisma: PrismaClient,
+  drizzle: Drizzle,
   logger: Logger
 ): Promise<{ stage_type: string; priority: string; task_status: string; count: number }[]> => {
   if (process.env.NODE_ENV === 'test') return [];
 
   try {
-    // Use raw query for optimal performance with complex joins and grouping
-    const results = await prisma.$queryRaw<{ stage_type: string; priority: string; task_status: string; count: bigint }[]>`
-      SELECT 
-        s.type AS "stage_type",
-        j.priority AS "priority",
-        t.status AS "task_status",
-        COUNT(t.id) AS "count"
-      FROM 
-        "job_manager"."task" AS t
-      INNER JOIN 
-        "job_manager"."stage" AS s ON t."stage_id" = s.id
-      INNER JOIN 
-        "job_manager"."job" AS j ON s."job_id" = j.id
-      GROUP BY 
-        s.type, j.priority, t.status
-      ORDER BY
-        s.type, j.priority, t.status;
-    `;
-
-    // Convert BigInt count to number for compatibility
-    return results.map((row) => ({
-      ...row,
-      count: Number(row.count),
-    }));
+    return await drizzle
+      .select({ stage_type: stageTable.type, priority: jobTable.priority, task_status: taskTable.status, count: count(taskTable.id) })
+      .from(taskTable)
+      .innerJoin(stageTable, eq(taskTable.stageId, stageTable.id))
+      .innerJoin(jobTable, eq(stageTable.jobId, jobTable.id))
+      .groupBy(stageTable.type, jobTable.priority, taskTable.status)
+      .orderBy(stageTable.type, jobTable.priority, taskTable.status);
   } catch (err) {
     logger.error({
       msg: 'Failed to get task queue depth by stage type using database aggregation',
@@ -237,7 +142,7 @@ const getTaskQueueDepthByStageType = async (
 /**
  * Initialize gauge for tracking tasks by all statuses
  */
-const initializeTasksByStatusGauge = (logger: Logger, prisma: PrismaClient, serviceMetricsRegistry: Registry): void => {
+const initializeTasksByStatusGauge = (logger: Logger, drizzle: Drizzle, serviceMetricsRegistry: Registry): void => {
   new Gauge({
     name: 'jobnik_tasks_by_status',
     help: 'Current number of tasks by status',
@@ -248,7 +153,7 @@ const initializeTasksByStatusGauge = (logger: Logger, prisma: PrismaClient, serv
       try {
         this.reset();
 
-        const statusCounts = await getTaskCountsByStatus(prisma);
+        const statusCounts = await getTaskCountsByStatus(drizzle);
 
         for (const statusCount of statusCounts) {
           this.set({ task_status: statusCount.task_status, stage_type: statusCount.stage_type }, statusCount.count);
@@ -275,7 +180,7 @@ const initializeTasksByStatusGauge = (logger: Logger, prisma: PrismaClient, serv
 /**
  * Initialize gauge for tracking stages by all statuses
  */
-const initializeStagesByStatusGauge = (logger: Logger, prisma: PrismaClient, serviceMetricsRegistry: Registry): void => {
+const initializeStagesByStatusGauge = (logger: Logger, drizzle: Drizzle, serviceMetricsRegistry: Registry): void => {
   new Gauge({
     name: 'jobnik_stages_by_status',
     help: 'Current number of stages by status',
@@ -286,7 +191,7 @@ const initializeStagesByStatusGauge = (logger: Logger, prisma: PrismaClient, ser
       try {
         this.reset();
 
-        const statusCounts = await getStageCountsByStatus(prisma);
+        const statusCounts = await getStageCountsByStatus(drizzle);
 
         for (const statusCount of statusCounts) {
           this.set({ stage_status: statusCount.stage_status, stage_type: statusCount.stage_type }, statusCount.count);
@@ -313,7 +218,7 @@ const initializeStagesByStatusGauge = (logger: Logger, prisma: PrismaClient, ser
 /**
  * Initialize gauge for tracking jobs by all statuses
  */
-const initializeJobsByStatusGauge = (logger: Logger, prisma: PrismaClient, serviceMetricsRegistry: Registry): void => {
+const initializeJobsByStatusGauge = (logger: Logger, drizzle: Drizzle, serviceMetricsRegistry: Registry): void => {
   new Gauge({
     name: 'jobnik_jobs_by_status',
     help: 'Current number of jobs by status',
@@ -324,7 +229,7 @@ const initializeJobsByStatusGauge = (logger: Logger, prisma: PrismaClient, servi
       try {
         this.reset();
 
-        const statusCounts = await getJobCountsByStatus(prisma);
+        const statusCounts = await getJobCountsByStatus(drizzle);
 
         for (const statusCount of statusCounts) {
           this.set({ job_status: statusCount.job_status }, statusCount.count);
@@ -351,7 +256,7 @@ const initializeJobsByStatusGauge = (logger: Logger, prisma: PrismaClient, servi
 /**
  * Initialize gauge for tracking tasks by stage type and priority
  */
-const initializeTasksByTypePriorityGauge = (logger: Logger, prisma: PrismaClient, serviceMetricsRegistry: Registry): void => {
+const initializeTasksByTypePriorityGauge = (logger: Logger, drizzle: Drizzle, serviceMetricsRegistry: Registry): void => {
   new Gauge({
     name: 'jobnik_tasks_count',
     help: 'Current number of entire tasks by stage type and priority',
@@ -363,7 +268,7 @@ const initializeTasksByTypePriorityGauge = (logger: Logger, prisma: PrismaClient
         // Clear all previous metrics first
         this.reset();
 
-        const queueDepths = await getTaskQueueDepthByStageType(prisma, logger);
+        const queueDepths = await getTaskQueueDepthByStageType(drizzle, logger);
 
         // If no pending tasks, explicitly set a zero metric to ensure proper clearing
         if (queueDepths.length === 0) {
@@ -400,11 +305,11 @@ const initializeTasksByTypePriorityGauge = (logger: Logger, prisma: PrismaClient
 /**
  * Initialize all service-level gauge metrics
  */
-const initializeServiceGauges = (logger: Logger, prisma: PrismaClient, serviceMetricsRegistry: Registry): void => {
-  initializeTasksByStatusGauge(logger, prisma, serviceMetricsRegistry);
-  initializeStagesByStatusGauge(logger, prisma, serviceMetricsRegistry);
-  initializeJobsByStatusGauge(logger, prisma, serviceMetricsRegistry);
-  initializeTasksByTypePriorityGauge(logger, prisma, serviceMetricsRegistry);
+const initializeServiceGauges = (logger: Logger, drizzle: Drizzle, serviceMetricsRegistry: Registry): void => {
+  initializeTasksByStatusGauge(logger, drizzle, serviceMetricsRegistry);
+  initializeStagesByStatusGauge(logger, drizzle, serviceMetricsRegistry);
+  initializeJobsByStatusGauge(logger, drizzle, serviceMetricsRegistry);
+  initializeTasksByTypePriorityGauge(logger, drizzle, serviceMetricsRegistry);
 };
 
 /**
@@ -413,10 +318,10 @@ const initializeServiceGauges = (logger: Logger, prisma: PrismaClient, serviceMe
  */
 const serviceMetricsFactory: FactoryFunction<void> = (dependencyContainer) => {
   const logger = dependencyContainer.resolve<Logger>(SERVICES.LOGGER);
-  const prisma = dependencyContainer.resolve<PrismaClient>(SERVICES.PRISMA);
+  const drizzle = dependencyContainer.resolve<Drizzle>(SERVICES.DRIZZLE);
   const serviceMetricsRegistry = dependencyContainer.resolve<Registry>(SERVICES.SERVICE_METRICS);
 
-  initializeServiceGauges(logger, prisma, serviceMetricsRegistry);
+  initializeServiceGauges(logger, drizzle, serviceMetricsRegistry);
 };
 
 export const SERVICE_METRICS_SYMBOL = Symbol('serviceMetricsFactory');

@@ -1,23 +1,21 @@
 import type { Application } from 'express';
 import type { DependencyContainer } from 'tsyringe';
 import { schedule, validate } from 'node-cron';
-import type { PrismaClient } from '@prismaClient';
 import type { ConfigType } from '@common/config';
 import { registerExternalValues, type RegisterOptions } from './containerConfig';
 import { ServerBuilder } from './serverBuilder';
 import { SERVICES } from './common/constants';
-import { verifyDbSetup } from './db/createConnection';
+import { type Drizzle, verifyDbSetup } from './db/drizzle';
 import { TaskManager } from './tasks/models/manager';
 import { SERVICE_METRICS_SYMBOL } from './common/serviceMetrics';
 
 async function getApp(registerOptions?: RegisterOptions): Promise<[Application, DependencyContainer]> {
   const container = await registerExternalValues(registerOptions);
-  const prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
+  const drizzle = container.resolve<Drizzle>(SERVICES.DRIZZLE);
   const config = container.resolve<ConfigType>(SERVICES.CONFIG);
-  const dbConfig = config.get('db');
   const cronConfig = config.get('staleTasksSweeperCron');
 
-  await verifyDbSetup(prisma, dbConfig.schema);
+  await verifyDbSetup(drizzle);
 
   container.resolve(SERVICE_METRICS_SYMBOL); // Initialize service metrics
 

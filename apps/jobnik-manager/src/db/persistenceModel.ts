@@ -1,4 +1,3 @@
-import type { $Enums } from '@prismaClient';
 import type { jobTable, stageTable, taskTable } from './entities';
 
 /* eslint-disable @typescript-eslint/naming-convention */
@@ -10,7 +9,7 @@ export const JobOperationStatus = {
   ABORTED: 'ABORTED',
   CREATED: 'CREATED',
   PAUSED: 'PAUSED',
-} as const satisfies typeof $Enums.JobOperationStatus;
+} as const;
 
 export type JobOperationStatus = (typeof JobOperationStatus)[keyof typeof JobOperationStatus];
 
@@ -22,7 +21,7 @@ export const StageOperationStatus = {
   ABORTED: 'ABORTED',
   WAITING: 'WAITING',
   CREATED: 'CREATED',
-} as const satisfies typeof $Enums.StageOperationStatus;
+} as const;
 
 export type StageOperationStatus = (typeof StageOperationStatus)[keyof typeof StageOperationStatus];
 
@@ -33,7 +32,7 @@ export const TaskOperationStatus = {
   FAILED: 'FAILED',
   CREATED: 'CREATED',
   RETRIED: 'RETRIED',
-} as const satisfies typeof $Enums.TaskOperationStatus;
+} as const;
 
 export type TaskOperationStatus = (typeof TaskOperationStatus)[keyof typeof TaskOperationStatus];
 
@@ -43,7 +42,7 @@ export const Priority = {
   MEDIUM: 'MEDIUM',
   LOW: 'LOW',
   VERY_LOW: 'VERY_LOW',
-} as const satisfies typeof $Enums.Priority;
+} as const;
 
 export type Priority = (typeof Priority)[keyof typeof Priority];
 /* eslint-enable @typescript-eslint/naming-convention */

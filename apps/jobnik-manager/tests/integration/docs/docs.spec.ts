@@ -3,7 +3,7 @@ import type { DependencyContainer } from 'tsyringe';
 import { jsLogger } from '@map-colonies/js-logger';
 import { trace } from '@opentelemetry/api';
 import httpStatusCodes from 'http-status-codes';
-import type { PrismaClient } from '@prismaClient';
+import type { Drizzle } from '@src/db/drizzle';
 import { getApp } from '@src/app';
 import { SERVICES } from '@src/common/constants';
 import { initConfig } from '@src/common/config';
@@ -12,7 +12,7 @@ import { DocsRequestSender } from './helpers/docsRequestSender';
 
 describe('docs', function () {
   let requestSender: DocsRequestSender;
-  let prisma: PrismaClient;
+  let drizzle: Drizzle;
   let container: DependencyContainer;
 
   beforeAll(async function () {
@@ -30,12 +30,11 @@ describe('docs', function () {
     });
 
     requestSender = new DocsRequestSender(app);
-    prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
-    await truncateAllTables(prisma);
+    drizzle = container.resolve<Drizzle>(SERVICES.DRIZZLE);
+    await truncateAllTables(drizzle);
   });
 
   afterEach(async function () {
-    await prisma.$disconnect();
     await endDatabasePool(container);
   });
 

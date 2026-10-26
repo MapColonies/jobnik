@@ -65,7 +65,7 @@ export function getErrorHandlerMiddleware(): ErrorRequestHandler {
     }
 
     // Annotated so the guard doesn't narrow `err` away from HttpError.
-    const isDatabaseError: boolean = isDrizzleQueryError(err) || ('isPrismaError' in err && err.isPrismaError === true);
+    const isDatabaseError: boolean = isDrizzleQueryError(err);
     if (isDatabaseError) {
       err.code = 'DATABASE_RELATED_ERROR';
     }
