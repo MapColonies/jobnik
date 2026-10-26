@@ -1,6 +1,5 @@
-import type { components, operations, JobId, StageId } from 'jobnik-openapi';
-import type { JobRow } from '@src/jobs/models/models';
-import type { PrismaTransaction } from '@src/db/types';
+import type { components, operations } from 'jobnik-openapi';
+import type { DrizzleTx } from '@src/db/drizzle';
 import type { Job, Stage, Task, TaskOperationStatus } from '@src/db/persistenceModel';
 
 type StageModel = components['schemas']['getStageResponse'];
@@ -8,13 +7,7 @@ type StageCreateModel = components['schemas']['createStagePayloadRequest'];
 type StageSummary = components['schemas']['summary'];
 type StageFindCriteriaArg = operations['getStagesV1']['parameters']['query'];
 type StagesPaginatedResponse = components['schemas']['stagesPaginatedResponse'];
-/**
- * TODO: `id`/`jobId` are re-branded here instead of at the Prisma schema level because
- * prisma-json-types-generator throws on `@db.Uuid` string columns (breaks its `UuidFilter`
- * handling and silently drops Json overrides for later models). Move this branding into
- * schema.prisma once that upstream bug is fixed.
- */
-type StageIncludingJob = Omit<StagePrismaObject, 'id' | 'jobId'> & { id: StageId; jobId: JobId; job: JobRow };
+
 interface UpdateSummaryCount {
   add: { status: TaskOperationStatus; count: number };
   remove?: { status: TaskOperationStatus; count: number };
@@ -27,25 +20,34 @@ interface UpdateSummaryCount {
 interface StageEntityOptions {
   includeTasks?: boolean;
   includeJob?: boolean;
-  tx?: PrismaTransaction;
+  tx?: DrizzleTx;
 }
 
 /**
- * Type definition for Stage with optional Task and Job inclusion
- * @interface StagePrismaObject
+ * A stage row of the Persistence model, with its tasks and job when they were requested
  */
-interface StagePrismaObjectBase extends Stage {
-  task?: Task[];
-  job?: Job;
-}
-type StagePrismaObject = StagePrismaObjectBase;
+type StageRow = Stage & { tasks?: Task[]; job?: Job };
+
+/**
+ * A stage row loaded together with its job
+ */
+type StageIncludingJob = Stage & { job: Job };
+
+/**
+ * The stage row shape returned for the given entity options
+ * @template TOptions - the options the stage was loaded with
+ */
+type StageEntity<TOptions extends StageEntityOptions> = Stage &
+  (TOptions extends { includeTasks: true } ? { tasks: Task[] } : unknown) &
+  (TOptions extends { includeJob: true } ? { job: Job } : unknown);
 
 export type {
   StageSummary,
   StageModel,
   StageFindCriteriaArg,
   StageCreateModel,
-  StagePrismaObject,
+  StageRow,
+  StageEntity,
   UpdateSummaryCount,
   StageIncludingJob,
   StageEntityOptions,
