@@ -9,6 +9,8 @@ type SuccessMessagesObj = {
 
 export const SERVICE_NAME = readPackageJsonSync().name ?? 'unknown_service';
 export const DB_CONNECTION_TIMEOUT = 20000;
+/** Upper bound, in milliseconds, for every statement and idle period inside a database transaction. */
+export const TX_TIMEOUT_MS = 30000;
 export const NODE_VERSION = process.versions.node;
 
 export const IGNORED_OUTGOING_TRACE_ROUTES = [/^.*\/v1\/metrics.*$/];

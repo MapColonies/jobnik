@@ -685,8 +685,7 @@ describe('job', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
-        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });

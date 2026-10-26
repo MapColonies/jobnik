@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { getTableName, sql, type RelationsFilter } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { runMigrations as runMigrationsBase } from '@map-colonies/drizzle-utils';
+import { TX_TIMEOUT_MS } from '@common/constants';
 import { JOB_MANAGER_SCHEMA, jobTable, relations, stageTable, taskTable } from './entities';
 
 export type Drizzle = ReturnType<typeof drizzle<typeof relations>>;
@@ -21,8 +22,54 @@ export type StageFilter = RelationsFilter<(typeof relations)['stage'], typeof re
 /** A relational query filter on the task table; keys whose value is undefined are ignored. */
 export type TaskFilter = RelationsFilter<(typeof relations)['task'], typeof relations>;
 
-export function createDrizzle(pool: Pool): Drizzle {
-  return drizzle({ client: pool, relations });
+/**
+ * Thrown when a transaction fails before its callback runs, for example when no connection can be checked out of the pool.
+ * The driver reports such failures as plain errors rather than query errors.
+ */
+export class DatabaseConnectionError extends Error {
+  public constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'DatabaseConnectionError';
+  }
+}
+
+export interface CreateDrizzleOptions {
+  /**
+   * Upper bound, in milliseconds, for every statement and idle period inside a transaction.
+   * Zero disables the bound.
+   */
+  transactionTimeoutMs?: number;
+}
+
+export function createDrizzle(pool: Pool, options: CreateDrizzleOptions = {}): Drizzle {
+  const db = drizzle({ client: pool, relations });
+  const transactionTimeoutMs = options.transactionTimeoutMs ?? TX_TIMEOUT_MS;
+  const originalTransaction = db.transaction.bind(db);
+
+  const transaction: Drizzle['transaction'] = async (callback, config) => {
+    // Held in an object because the flag is set inside the callback, which control-flow narrowing can't see.
+    const state = { callbackStarted: false };
+    try {
+      return await originalTransaction(async (tx) => {
+        state.callbackStarted = true;
+        if (transactionTimeoutMs > 0) {
+          const timeout = String(transactionTimeoutMs);
+          await tx.execute(
+            sql`select set_config('statement_timeout', ${timeout}, true), set_config('idle_in_transaction_session_timeout', ${timeout}, true)`
+          );
+        }
+        return callback(tx);
+      }, config);
+    } catch (error) {
+      if (state.callbackStarted) {
+        throw error;
+      }
+      throw new DatabaseConnectionError(`Failed to start a database transaction: ${(error as Error).message}`, { cause: error });
+    }
+  };
+  db.transaction = transaction;
+
+  return db;
 }
 
 export async function runMigrations(drizzle: NodePgDatabase): Promise<void> {
