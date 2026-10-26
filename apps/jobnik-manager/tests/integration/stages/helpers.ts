@@ -1,7 +1,6 @@
 import { createActor } from 'xstate';
 import { faker } from '@faker-js/faker';
-import { type Prisma, type PrismaClient } from '@prismaClient';
-import type { StagePrismaObject } from '@src/stages/models/models';
+import { type Prisma, type PrismaClient, type Stage as PrismaStage } from '@prismaClient';
 import { stageStateMachine } from '@src/stages/models/stageStateMachine';
 import { defaultStatusCounts } from '@src/stages/models/helper';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
@@ -29,7 +28,7 @@ export const addJobRecord = async (body: Prisma.JobCreateInput, prisma: PrismaCl
  * @param prisma prisma client
  * @returns
  */
-export const addStageRecord = async (body: Prisma.StageCreateManyInput, prisma: PrismaClient): Promise<StagePrismaObject> => {
+export const addStageRecord = async (body: Prisma.StageCreateManyInput, prisma: PrismaClient): Promise<PrismaStage> => {
   const res = await prisma.stage.create({ data: body });
   return res;
 };

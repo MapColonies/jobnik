@@ -2,7 +2,7 @@ import { createActor } from 'xstate';
 import { convertArrayPrismaTaskToTaskResponse } from '@src/tasks/models/helper';
 import { createCamelCaseMapper } from '@src/common/utils/formatter';
 import { TaskOperationStatus } from '@src/db/persistenceModel';
-import type { StageCreateModel, StageModel, StagePrismaObject, StageSummary } from './models';
+import type { StageCreateModel, StageModel, StageRow, StageSummary } from './models';
 import { stageStateMachine } from './stageStateMachine';
 
 /**
@@ -26,29 +26,29 @@ const defaultStatusCounts = Object.fromEntries(Object.values(summaryCountsMapper
 >;
 
 /**
- * This function converts a Prisma stage object to a StageModel API object.
- * @param prismaObjects db entity
+ * This function converts a stage row to a StageModel API object.
+ * @param stageRow db entity
  * @returns StageModel
  */
-function convertPrismaToStageResponse(prismaObjects: StagePrismaObject): StageModel {
-  const { data, userMetadata, task, tracestate, xstate, ...rest } = prismaObjects;
+function convertStageRowToResponse(stageRow: StageRow): StageModel {
+  const { data, userMetadata, tasks, job, tracestate, xstate, ...rest } = stageRow;
 
   const transformedFields = {
-    data: data as Record<string, unknown>,
-    userMetadata: userMetadata as Record<string, unknown>,
-    tasks: Array.isArray(task) ? convertArrayPrismaTaskToTaskResponse(task) : undefined,
+    data,
+    userMetadata,
+    tasks: tasks ? convertArrayPrismaTaskToTaskResponse(tasks) : undefined,
     tracestate: tracestate ?? undefined,
   };
-  return Object.assign(rest, transformedFields) as StageModel;
+  return Object.assign(rest, transformedFields);
 }
 
 /**
- * This function converts an array of Prisma stage objects to an array of StageModel API objects.
- * @param prismaObjects array of db entities
+ * This function converts an array of stage rows to an array of StageModel API objects.
+ * @param stageRows array of db entities
  * @returns array of StageModel
  */
-function convertArrayPrismaStageToStageResponse(prismaObjects: StagePrismaObject[]): StageModel[] {
-  return prismaObjects.map((stage) => convertPrismaToStageResponse(stage));
+function convertArrayStageRowToResponse(stageRows: StageRow[]): StageModel[] {
+  return stageRows.map((stage) => convertStageRowToResponse(stage));
 }
 
 /**
@@ -88,8 +88,8 @@ function getInitialXstate(stage: StageCreateModel, firstStage = false): StagePer
 
 export {
   getCurrentPercentage,
-  convertArrayPrismaStageToStageResponse,
-  convertPrismaToStageResponse,
+  convertArrayStageRowToResponse,
+  convertStageRowToResponse,
   getInitialXstate,
   summaryCountsMapper,
   defaultStatusCounts,

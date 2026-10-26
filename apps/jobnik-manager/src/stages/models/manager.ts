@@ -6,22 +6,22 @@ import { withSpanAsyncV4 } from '@map-colonies/tracing-utils';
 import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
 import type { JobId, StageId } from 'jobnik-openapi';
 import { IllegalStageStatusTransitionError, JobInFiniteStateError, JobNotFoundError, StageNotFoundError } from 'jobnik-openapi';
-import type { PrismaClient } from '@prismaClient';
-import { Prisma } from '@prismaClient';
+import { eq } from 'drizzle-orm';
 import { JobManager } from '@src/jobs/models/manager';
-import { SERVICES, TX_TIMEOUT_MS, XSTATE_DONE_STATE } from '@common/constants';
+import { SERVICES, XSTATE_DONE_STATE } from '@common/constants';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
 import { jobStateMachine } from '@src/jobs/models/jobStateMachine';
-import { illegalStatusTransitionErrorMessage, prismaKnownErrors } from '@src/common/errors';
+import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 import { errorMessages as jobsErrorMessages } from '@src/jobs/models/errors';
 import { errorMessages as stagesErrorMessages } from '@src/stages/models/errors';
-import type { PrismaTransaction } from '@src/db/types';
+import type { Drizzle, DrizzleTx } from '@src/db/drizzle';
+import { jobTable, stageTable } from '@src/db/entities';
 import { ATTR_MESSAGING_DESTINATION_NAME, ATTR_MESSAGING_MESSAGE_CONVERSATION_ID } from '@src/common/semconv';
-import { paginate } from '@src/common/utils/pagination';
-import { type Stage, JobOperationStatus, StageOperationStatus } from '@src/db/persistenceModel';
+import { type NewStage, JobOperationStatus, StageOperationStatus } from '@src/db/persistenceModel';
 import { StageRepository } from '../DAL/stageRepository';
 import type {
   StageCreateModel,
+  StageEntity,
   StageEntityOptions,
   StageFindCriteriaArg,
   StageIncludingJob,
@@ -30,36 +30,14 @@ import type {
   StagesPaginatedResponse,
   UpdateSummaryCount,
 } from './models';
-import {
-  convertArrayPrismaStageToStageResponse,
-  convertPrismaToStageResponse,
-  defaultStatusCounts,
-  getCurrentPercentage,
-  getInitialXstate,
-} from './helper';
+import { convertArrayStageRowToResponse, convertStageRowToResponse, defaultStatusCounts, getCurrentPercentage, getInitialXstate } from './helper';
 import { OperationStatusMapper, stageStateMachine } from './stageStateMachine';
 
-/**
- * TODO: `id`/`jobId` are re-branded here instead of at the Prisma schema level because
- * prisma-json-types-generator throws on `@db.Uuid` string columns (breaks its `UuidFilter`
- * handling and silently drops Json overrides for later models). Move this branding into
- * schema.prisma once that upstream bug is fixed.
- */
-type GetStageEntityByIdReturnType<TOptions extends StageEntityOptions> = Omit<
-  TOptions extends { includeTasks: true; includeJob: true }
-    ? Prisma.StageGetPayload<{ include: { task: true; job: true } }>
-    : TOptions extends { includeTasks: true }
-      ? Prisma.StageGetPayload<{ include: { task: true } }>
-      : TOptions extends { includeJob: true }
-        ? Prisma.StageGetPayload<{ include: { job: true } }>
-        : Stage,
-  'id' | 'jobId'
-> & { id: StageId; jobId: JobId };
 @injectable()
 export class StageManager {
   public constructor(
     @inject(SERVICES.LOGGER) private readonly logger: Logger,
-    @inject(SERVICES.PRISMA) private readonly prisma: PrismaClient,
+    @inject(SERVICES.DRIZZLE) private readonly drizzle: Drizzle,
     @inject(SERVICES.TRACER) public readonly tracer: Tracer,
     @inject(StageRepository) private readonly stageRepository: StageRepository,
     @inject(JobManager) private readonly jobManager: JobManager
@@ -105,33 +83,29 @@ export class StageManager {
       actualStatus = StageOperationStatus.CREATED;
     }
 
-    const input: Prisma.StageCreateInput = {
+    const input = {
       ...bodyInput,
       order: nextOrder,
       summary: defaultStatusCounts,
       status: actualStatus,
-      job: {
-        connect: {
-          id: jobId,
-        },
-      },
+      jobId,
       xstate: stagePersistenceSnapshot,
       traceparent,
       tracestate,
-    };
-
-    const queryBody: Prisma.StageCreateArgs = {
-      data: input,
-    };
+    } satisfies NewStage;
 
     try {
-      const stage = await this.prisma.stage.create(queryBody);
+      const [stage] = await this.drizzle.insert(stageTable).values(input).returning();
+      /* v8 ignore next 3 -- @preserve */
+      if (!stage) {
+        throw new Error('Failed to create stage: no row returned from database.');
+      }
 
       spanActive?.setAttributes({
         [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stage.id,
       });
 
-      return convertPrismaToStageResponse(stage);
+      return convertStageRowToResponse(stage);
     } catch (error) {
       this.logger.error(`Failed adding stage to job with error: ${(error as Error).message}`);
 
@@ -141,24 +115,9 @@ export class StageManager {
 
   @withSpanAsyncV4
   public async getStages(params: StageFindCriteriaArg): Promise<StagesPaginatedResponse> {
-    const { page, page_size, ...filterParams } = params ?? {};
+    const { total, items: stages } = await this.stageRepository.findStages(params);
 
-    const where = {
-      AND: {
-        jobId: { equals: filterParams.job_id },
-        type: { equals: filterParams.stage_type },
-        status: { equals: filterParams.stage_operation_status },
-      },
-    };
-
-    const { total, items: stages } = await paginate(
-      this.prisma.stage,
-      { where, include: { task: filterParams.should_return_tasks ?? false }, orderBy: { id: 'asc' as const } },
-      page,
-      page_size
-    );
-
-    const items = convertArrayPrismaStageToStageResponse(stages);
+    const items = convertArrayStageRowToResponse(stages);
     return { total, items };
   }
 
@@ -179,7 +138,7 @@ export class StageManager {
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: stage.jobId,
     });
 
-    return convertPrismaToStageResponse(stage);
+    return convertStageRowToResponse(stage);
   }
 
   @withSpanAsyncV4
@@ -192,21 +151,8 @@ export class StageManager {
     // To validate existence of job, if not will throw JobNotFoundError
     await this.jobManager.getJobById(jobId);
 
-    const queryBody = {
-      where: {
-        jobId,
-      },
-      include: {
-        task: includeTasks,
-      },
-      orderBy: {
-        order: 'asc' as const,
-      },
-    };
-
-    const stages = await this.prisma.stage.findMany(queryBody);
-    const result = stages.map((stage) => convertPrismaToStageResponse(stage));
-    return result;
+    const stages = await this.stageRepository.findStagesByJobId(jobId, includeTasks);
+    return convertArrayStageRowToResponse(stages);
   }
 
   @withSpanAsyncV4
@@ -228,27 +174,19 @@ export class StageManager {
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
     });
 
-    const updateQueryBody = {
-      where: {
-        id: stageId,
-      },
-      data: {
-        userMetadata,
-      },
-    };
+    const updatedStages = await this.drizzle
+      .update(stageTable)
+      .set({ userMetadata })
+      .where(eq(stageTable.id, stageId))
+      .returning({ id: stageTable.id });
 
-    try {
-      await this.prisma.stage.update(updateQueryBody);
-    } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === prismaKnownErrors.recordNotFound) {
-        throw new StageNotFoundError(stagesErrorMessages.stageNotFound);
-      }
-      throw err;
+    if (updatedStages.length === 0) {
+      throw new StageNotFoundError(stagesErrorMessages.stageNotFound);
     }
   }
 
   @withSpanAsyncV4
-  public async updateStatus(stageId: StageId, status: StageOperationStatus, tx?: PrismaTransaction): Promise<void> {
+  public async updateStatus(stageId: StageId, status: StageOperationStatus, tx?: DrizzleTx): Promise<void> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
@@ -256,12 +194,9 @@ export class StageManager {
     });
 
     if (!tx) {
-      return this.prisma.$transaction(
-        async (newTx) => {
-          await this.executeUpdateStatus(stageId, status, newTx);
-        },
-        { timeout: TX_TIMEOUT_MS }
-      );
+      return this.drizzle.transaction(async (newTx) => {
+        await this.executeUpdateStatus(stageId, status, newTx);
+      });
     }
 
     await this.executeUpdateStatus(stageId, status, tx);
@@ -271,32 +206,23 @@ export class StageManager {
    * This method is used to get a stage entity by its id from the database.
    * @param stageId unique identifier of the stage.
    * @param options options for including related entities.
-   * @returns The stage entity if found, otherwise null.
+   * @returns The stage entity if found, otherwise undefined.
    *
    */
   @withSpanAsyncV4
-  public async getStageEntityById<T extends StageEntityOptions>(
-    stageId: StageId,
-    options: T = {} as T
-  ): Promise<null | GetStageEntityByIdReturnType<T>> {
+  public async getStageEntityById<T extends StageEntityOptions>(stageId: StageId, options: T = {} as T): Promise<StageEntity<T> | undefined> {
     trace.getActiveSpan()?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
     });
 
-    const prisma = options.tx ?? this.prisma;
+    if (options.includeTasks === true || options.includeJob === true) {
+      return this.stageRepository.findStageWithRelationsById(stageId, options);
+    }
 
-    const queryBody = {
-      where: {
-        id: stageId,
-      },
-      include: {
-        job: options.includeJob,
-        task: options.includeTasks,
-      },
-    };
+    const drizzle = options.tx ?? this.drizzle;
+    const stage = await drizzle.query.stage.findFirst({ where: { id: { eq: stageId } } });
 
-    const stage = await prisma.stage.findUnique(queryBody);
-    return stage as null | GetStageEntityByIdReturnType<T>;
+    return stage as StageEntity<T> | undefined;
   }
 
   /**
@@ -305,7 +231,7 @@ export class StageManager {
    * @param summary summary object containing the current progress aggregated task data of the stage.
    */
   @withSpanAsyncV4
-  public async updateStageProgressFromTaskChanges(stageId: StageId, summaryUpdatePayload: UpdateSummaryCount, tx: PrismaTransaction): Promise<void> {
+  public async updateStageProgressFromTaskChanges(stageId: StageId, summaryUpdatePayload: UpdateSummaryCount, tx: DrizzleTx): Promise<void> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
@@ -330,7 +256,7 @@ export class StageManager {
   }
 
   @withSpanAsyncV4
-  private async executeUpdateStatus(stageId: StageId, targetStatus: StageOperationStatus, tx: PrismaTransaction): Promise<void> {
+  private async executeUpdateStatus(stageId: StageId, targetStatus: StageOperationStatus, tx: DrizzleTx): Promise<void> {
     const stage = await this.getStageEntityById(stageId, { includeJob: true, tx });
 
     if (!stage) {
@@ -357,11 +283,8 @@ export class StageManager {
 
     // can't move to PENDING if previous stage is not COMPLETED
     if (targetStatus === StageOperationStatus.PENDING && previousStageOrder > 0) {
-      const previousStage = await tx.stage.findFirst({
-        where: {
-          jobId: stage.jobId,
-          order: previousStageOrder,
-        },
+      const previousStage = await tx.query.stage.findFirst({
+        where: { jobId: { eq: stage.jobId }, order: previousStageOrder },
       });
 
       if (previousStage!.status !== StageOperationStatus.COMPLETED) {
@@ -380,31 +303,16 @@ export class StageManager {
     updateActor.send({ type: nextStatusChange });
     const newPersistedSnapshot = updateActor.getPersistedSnapshot();
 
-    const updateQueryBody = {
-      where: {
-        id: stageId,
-      },
-      data: {
-        status: targetStatus,
-        xstate: newPersistedSnapshot,
-      },
-    };
-
-    await tx.stage.update(updateQueryBody);
+    await tx.update(stageTable).set({ status: targetStatus, xstate: newPersistedSnapshot }).where(eq(stageTable.id, stageId));
 
     //#region update related entities
     // Update job completion when a stage is completed
     // If the stage is marked as completed, and there is a next stage in the job, update the next stage status to PENDING
     if (targetStatus === StageOperationStatus.COMPLETED) {
       const nextStageOrder = stage.order + 1;
-      // TODO: cast here, not at usage below, because Prisma has no concept of branded scalars
-      // (see GetStageEntityByIdReturnType above for why); revisit once that's fixed upstream.
-      const nextStage = (await tx.stage.findFirst({
-        where: {
-          jobId: stage.jobId,
-          order: nextStageOrder,
-        },
-      })) as (Stage & { id: StageId }) | null;
+      const nextStage = await tx.query.stage.findFirst({
+        where: { jobId: { eq: stage.jobId }, order: nextStageOrder },
+      });
 
       if (nextStage?.status === StageOperationStatus.CREATED) {
         await this.executeUpdateStatus(nextStage.id, StageOperationStatus.PENDING, tx);
@@ -442,7 +350,7 @@ export class StageManager {
    * @param summary summary object containing the current progress aggregated task data of the stage.
    */
   @withSpanAsyncV4
-  private async updateStageProgress(stage: StageIncludingJob, summary: StageSummary, tx: PrismaTransaction): Promise<void> {
+  private async updateStageProgress(stage: StageIncludingJob, summary: StageSummary, tx: DrizzleTx): Promise<void> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stage.id,
@@ -453,9 +361,8 @@ export class StageManager {
     });
 
     const completionPercentage = getCurrentPercentage(summary);
-    const stageUpdatedData: Prisma.StageUpdateInput = { percentage: completionPercentage };
 
-    await tx.stage.update({ where: { id: stage.id }, data: stageUpdatedData });
+    await tx.update(stageTable).set({ percentage: completionPercentage }).where(eq(stageTable.id, stage.id));
     if (summary.total === summary.completed) {
       await this.updateStatus(stage.id, StageOperationStatus.COMPLETED, tx);
 
@@ -483,15 +390,12 @@ export class StageManager {
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
     });
 
-    const lastStageResult = await this.prisma.stage.aggregate({
-      where: { jobId },
-      _max: { order: true },
-    });
+    const maxOrder = await this.stageRepository.findMaxStageOrder(jobId);
 
-    if (lastStageResult._max.order === null) {
+    if (maxOrder === null) {
       return 1;
     }
-    return lastStageResult._max.order + 1;
+    return maxOrder + 1;
   }
 
   /**
@@ -501,19 +405,13 @@ export class StageManager {
    * @param tx transaction context.
    */
   @withSpanAsyncV4
-  private async updateJobCompletionProgress(jobId: JobId, tx?: PrismaTransaction): Promise<{ completedStages: number; totalStages: number }> {
+  private async updateJobCompletionProgress(jobId: JobId, tx: DrizzleTx): Promise<{ completedStages: number; totalStages: number }> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
     });
 
-    /* v8 ignore next -- @preserve - defensive code, tx is always provided in tests */
-    const prisma = tx ?? this.prisma;
-
-    const [totalStages, completedStages] = await Promise.all([
-      prisma.stage.count({ where: { jobId } }),
-      prisma.stage.count({ where: { jobId, status: StageOperationStatus.COMPLETED } }),
-    ]);
+    const { totalStages, completedStages } = await this.stageRepository.countStagesByJobId(jobId, tx);
 
     /* v8 ignore next 3 -- @preserve */
     if (totalStages === 0) {
@@ -523,10 +421,7 @@ export class StageManager {
     const JOB_PERCENTAGE_MULTIPLIER = 100;
     const completionPercentage = Math.floor((completedStages / totalStages) * JOB_PERCENTAGE_MULTIPLIER);
 
-    await prisma.job.update({
-      where: { id: jobId },
-      data: { percentage: completionPercentage },
-    });
+    await tx.update(jobTable).set({ percentage: completionPercentage }).where(eq(jobTable.id, jobId));
 
     return { completedStages, totalStages };
   }
