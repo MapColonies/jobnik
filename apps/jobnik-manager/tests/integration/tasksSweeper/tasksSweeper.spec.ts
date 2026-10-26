@@ -11,8 +11,8 @@ import { getConfig, initConfig } from '@src/common/config';
 import { inProgressStageXstatePersistentSnapshot } from '@tests/unit/data';
 import { defaultStatusCounts } from '@src/stages/models/helper';
 import { TaskManager } from '@src/tasks/models/manager';
-import { createProxyMock } from '@tests/configurations/mockPrisma';
 import { TaskOperationStatus, StageOperationStatus, JobOperationStatus } from '@src/db/persistenceModel';
+import { createTriggerOnUpdate, dropTriggerOnUpdate } from '../tasks/helpers';
 import { createJobnikTree, endDatabasePool, truncateAllTables } from '../common/utils';
 
 describe('TaskSweeper', () => {
@@ -36,8 +36,6 @@ describe('TaskSweeper', () => {
     prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
     taskManager = container.resolve(TaskManager);
     await truncateAllTables(prisma);
-
-    // Ensure Prisma methods exist before they can be spied on (Vitest 4.0 requirement)
   });
 
   afterEach(async function () {
@@ -296,34 +294,39 @@ describe('TaskSweeper', () => {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const findManySpy = createProxyMock(prisma.task, 'findMany');
-        findManySpy.mockRejectedValueOnce(new Error('Database error'));
+      it('should reject when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         await expect(taskManager.cleanStaleTasks()).toReject();
       });
 
       it('should keep cleaning the remaining stale tasks when updating one of them fails', async function () {
-        const { stage } = await createStageWithStaleTasks(2);
-        const originalTransaction = prisma.$transaction.bind(prisma);
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-        transactionSpy.mockImplementation(originalTransaction);
-        transactionSpy.mockRejectedValueOnce(new Error('Database error'));
+        const { stage, tasks } = await createStageWithStaleTasks(2);
+        await createTriggerOnUpdate(prisma, 'task', [tasks[0]!.id], 'fail');
 
-        await expect(taskManager.cleanStaleTasks()).toResolve();
+        try {
+          await expect(taskManager.cleanStaleTasks()).toResolve();
+        } finally {
+          await dropTriggerOnUpdate(prisma, 'task');
+        }
 
         await expect(getTaskStatuses(stage.id as StageId)).resolves.toEqual([TaskOperationStatus.FAILED, TaskOperationStatus.IN_PROGRESS].sort());
       });
 
-      it.each([
-        { errorKind: 'an Error', error: new Error('Database error') },
-        { errorKind: 'a non-Error value', error: 'Database error' },
-      ])('should resolve and leave the tasks untouched when every update throws $errorKind', async function ({ error }) {
-        const { stage } = await createStageWithStaleTasks(2);
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-        transactionSpy.mockRejectedValue(error);
+      it('should resolve and leave the tasks untouched when every update fails', async function () {
+        const { stage, tasks } = await createStageWithStaleTasks(2);
+        await createTriggerOnUpdate(
+          prisma,
+          'task',
+          tasks.map((task) => task.id),
+          'fail'
+        );
 
-        await expect(taskManager.cleanStaleTasks()).toResolve();
+        try {
+          await expect(taskManager.cleanStaleTasks()).toResolve();
+        } finally {
+          await dropTriggerOnUpdate(prisma, 'task');
+        }
 
         await expect(getTaskStatuses(stage.id as StageId)).resolves.toEqual([TaskOperationStatus.IN_PROGRESS, TaskOperationStatus.IN_PROGRESS]);
       });

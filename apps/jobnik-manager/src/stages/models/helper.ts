@@ -1,5 +1,5 @@
 import { createActor } from 'xstate';
-import { convertArrayPrismaTaskToTaskResponse } from '@src/tasks/models/helper';
+import { convertArrayTaskRowToResponse } from '@src/tasks/models/helper';
 import { createCamelCaseMapper } from '@src/common/utils/formatter';
 import { TaskOperationStatus } from '@src/db/persistenceModel';
 import type { StageCreateModel, StageModel, StageRow, StageSummary } from './models';
@@ -36,7 +36,7 @@ function convertStageRowToResponse(stageRow: StageRow): StageModel {
   const transformedFields = {
     data,
     userMetadata,
-    tasks: tasks ? convertArrayPrismaTaskToTaskResponse(tasks) : undefined,
+    tasks: tasks ? convertArrayTaskRowToResponse(tasks) : undefined,
     tracestate: tracestate ?? undefined,
   };
   return Object.assign(rest, transformedFields);
