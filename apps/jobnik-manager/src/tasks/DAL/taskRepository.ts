@@ -3,7 +3,7 @@ import { and, asc, eq, inArray, relationsFilterToSQL } from 'drizzle-orm';
 import type { TaskId } from 'jobnik-openapi';
 import { DEFAULT_PAGE_SIZE, paginationParamsToOffsetAndLimit } from '@map-colonies/drizzle-utils';
 import { SERVICES } from '@src/common/constants';
-import type { Drizzle, DrizzleTx, TaskFilter } from '@src/db/drizzle';
+import type { Drizzle, DrizzleTx, TableFilter } from '@src/db/drizzle';
 import { jobTable, relations, stageTable, taskTable } from '@src/db/entities';
 import { JobOperationStatus, StageOperationStatus, TaskOperationStatus, type NewTask, type Task } from '@src/db/persistenceModel';
 import type { PaginatedResult } from '@src/common/utils/pagination';
@@ -28,13 +28,13 @@ export class TaskRepository {
     const { page = DEFAULT_PAGE, pageSize = DEFAULT_PAGE_SIZE, stageId, stageType, status, fromDate, endDate } = params;
 
     // Relational filters skip undefined values, so unset criteria don't filter.
-    // The branded stage id goes through `eq`, as the filter can't tell it apart from an operator object.
+    // The branded stage id goes through `eq`, as the filter's types don't accept a branded id as a plain value.
     const where = {
       stageId: { eq: stageId },
       stage: stageType !== undefined ? { type: stageType } : undefined,
       status,
       creationTime: { gte: fromDate, lte: endDate },
-    } satisfies TaskFilter;
+    } satisfies TableFilter<'task'>;
 
     const { limit, offset } = paginationParamsToOffsetAndLimit({ page, pageSize });
 

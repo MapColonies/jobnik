@@ -1,40 +1,42 @@
 import { createActor } from 'xstate';
 import { faker } from '@faker-js/faker';
-import { type Prisma, type PrismaClient, type Stage as PrismaStage } from '@prismaClient';
+import type { JobId } from 'jobnik-openapi';
 import { stageStateMachine } from '@src/stages/models/stageStateMachine';
 import { defaultStatusCounts } from '@src/stages/models/helper';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
-import type { PrismaJobWithStages } from '../jobs/helpers';
+import type { Job, NewJob, NewStage, Stage } from '@src/db/persistenceModel';
+import type { Drizzle } from '@src/db/drizzle';
+import { jobTable, stageTable } from '@src/db/entities';
 
 const persistedSnapshot = createActor(stageStateMachine).start().getPersistedSnapshot();
 
 /**
  * Adding job record
- * @param body - prisma job create body
- * @param prisma - prisma client
- * @returns job record with related stages
+ * @param body - job insert body, with a plain string id
+ * @param drizzle - the fixtures' client
+ * @returns the inserted job row
  */
-export const addJobRecord = async (body: Prisma.JobCreateInput, prisma: PrismaClient): Promise<PrismaJobWithStages> => {
-  const res = await prisma.job.create({
-    data: body,
-    include: { stage: true },
-  });
-  return res;
+export const addJobRecord = async (body: Omit<NewJob, 'id'> & { id?: string }, drizzle: Drizzle): Promise<Job> => {
+  const [res] = await drizzle
+    .insert(jobTable)
+    .values({ ...body, id: body.id as JobId | undefined })
+    .returning();
+  return res!;
 };
 
 /**
  * adding stage record to exists job
- * @param body prisma stage create body
- * @param prisma prisma client
- * @returns
+ * @param body stage insert body
+ * @param drizzle the fixtures' client
+ * @returns the inserted stage row
  */
-export const addStageRecord = async (body: Prisma.StageCreateManyInput, prisma: PrismaClient): Promise<PrismaStage> => {
-  const res = await prisma.stage.create({ data: body });
-  return res;
+export const addStageRecord = async (body: NewStage, drizzle: Drizzle): Promise<Stage> => {
+  const [res] = await drizzle.insert(stageTable).values(body).returning();
+  return res!;
 };
 
 export const createStageBody = {
-  jobId: faker.string.uuid(),
+  jobId: faker.string.uuid() as JobId,
   type: 'UNKNOWN',
   data: {},
   summary: defaultStatusCounts,
@@ -43,4 +45,4 @@ export const createStageBody = {
   order: 1,
   traceparent: DEFAULT_TRACEPARENT,
   tracestate: null,
-} satisfies Prisma.StageCreateManyInput;
+} satisfies NewStage;

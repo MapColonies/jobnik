@@ -14,10 +14,10 @@ interface UpdateSummaryCount {
 }
 
 /**
- * Options for retrieving a stage entity
- * @interface StageEntityOptions
+ * Options for loading a stage row
+ * @interface StageRowOptions
  */
-interface StageEntityOptions {
+interface StageRowOptions {
   includeTasks?: boolean;
   includeJob?: boolean;
   tx?: DrizzleTx;
@@ -46,10 +46,10 @@ type StageRow = Stage & { tasks?: Task[]; job?: Job };
 type StageIncludingJob = Stage & { job: Job };
 
 /**
- * The stage row shape returned for the given entity options
+ * The stage row shape returned for the given load options
  * @template TOptions - the options the stage was loaded with
  */
-type StageEntity<TOptions extends StageEntityOptions> = Stage &
+type StageRowWithRelations<TOptions extends StageRowOptions> = Stage &
   (TOptions extends { includeTasks: true } ? { tasks: Task[] } : unknown) &
   (TOptions extends { includeJob: true } ? { job: Job } : unknown);
 
@@ -59,10 +59,10 @@ export type {
   StageFindCriteriaArg,
   StageCreateModel,
   StageRow,
-  StageEntity,
+  StageRowWithRelations,
   UpdateSummaryCount,
   StageIncludingJob,
-  StageEntityOptions,
+  StageRowOptions,
   StageSearchParams,
   StagesPaginatedResponse,
 };

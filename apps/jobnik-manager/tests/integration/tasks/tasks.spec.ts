@@ -12,9 +12,10 @@ import {
   type RequestSender,
 } from '@map-colonies/openapi-helpers/requestSender';
 import { faker } from '@faker-js/faker';
-import { openapiFilePath, type paths, type operations, type JobId, type StageId, type TaskId } from 'jobnik-openapi';
-import { DrizzleQueryError } from 'drizzle-orm';
-import { Prisma, type PrismaClient } from '@prismaClient';
+import { openapiFilePath, type paths, type operations, type StageId, type TaskId } from 'jobnik-openapi';
+import { and, DrizzleQueryError, eq, sql } from 'drizzle-orm';
+import type { Drizzle } from '@src/db/drizzle';
+import { taskTable } from '@src/db/entities';
 import { getApp } from '@src/app';
 import { SERVICES } from '@common/constants';
 import { initConfig } from '@src/common/config';
@@ -41,11 +42,9 @@ import { createTaskBody, createTaskRecords, waitForBlockedTaskUpdates } from './
 
 const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(expect);
 
-const LOCK_HOLDER_TIMEOUT_MS = 30_000;
-
 describe('task', function () {
   let requestSender: RequestSender<paths, operations>;
-  let prisma: PrismaClient;
+  let drizzle: Drizzle;
   let container: DependencyContainer;
 
   const memoryExporter = new InMemorySpanExporter();
@@ -68,13 +67,12 @@ describe('task', function () {
     });
 
     requestSender = await createRequestSender<paths, operations>(openapiFilePath, app);
-    prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
-    await truncateAllTables(prisma);
+    drizzle = container.resolve<Drizzle>(SERVICES.DRIZZLE);
+    await truncateAllTables(drizzle);
   });
 
   afterEach(async function () {
     vi.restoreAllMocks();
-    await prisma.$disconnect();
     await endDatabasePool(container);
     memoryExporter.reset();
   });
@@ -82,12 +80,12 @@ describe('task', function () {
   describe('#getTasks', function () {
     describe('Happy Path', function () {
       it('should return 200 with the matching task', async function () {
-        const { stage, tasks } = await createJobnikTree(prisma);
+        const { stage, tasks } = await createJobnikTree(drizzle);
 
         const taskId = tasks[0]!.id;
         const stageId = stage.id;
 
-        const response = await requestSender.getTasksByCriteriaV1({ queryParams: { stage_id: stageId as StageId } });
+        const response = await requestSender.getTasksByCriteriaV1({ queryParams: { stage_id: stageId } });
 
         expect(response).toMatchObject({
           status: StatusCodes.OK,
@@ -96,8 +94,8 @@ describe('task', function () {
       });
 
       it('should return 200 with only the tasks whose stage matches the stage_type filter', async function () {
-        const { tasks } = await createJobnikTree(prisma, {}, { type: 'SOME_TEST_TYPE_FILTER_A' }, [{}]);
-        await createJobnikTree(prisma, {}, { type: 'SOME_TEST_TYPE_FILTER_B' }, [{}]);
+        const { tasks } = await createJobnikTree(drizzle, {}, { type: 'SOME_TEST_TYPE_FILTER_A' }, [{}]);
+        await createJobnikTree(drizzle, {}, { type: 'SOME_TEST_TYPE_FILTER_B' }, [{}]);
 
         const response = await requestSender.getTasksByCriteriaV1({ queryParams: { stage_type: 'SOME_TEST_TYPE_FILTER_A' } });
 
@@ -111,7 +109,7 @@ describe('task', function () {
 
       it('should return 200 with only the tasks created within the from_date and end_date range', async function () {
         const now = Date.now();
-        const { tasks } = await createJobnikTree(prisma, {}, { type: 'SOME_TEST_TYPE_DATE_RANGE' }, [
+        const { tasks } = await createJobnikTree(drizzle, {}, { type: 'SOME_TEST_TYPE_DATE_RANGE' }, [
           { creationTime: new Date(now - 3 * 60 * 60 * 1000) },
           { creationTime: new Date(now - 60 * 60 * 1000) },
           { creationTime: new Date(now + 60 * 60 * 1000) },
@@ -145,7 +143,7 @@ describe('task', function () {
       });
 
       it('should return 200 with all tasks when no query params defined', async function () {
-        await createJobnikTree(prisma, {}, {}, [{}, {}]);
+        await createJobnikTree(drizzle, {}, {}, [{}, {}]);
 
         const response = await requestSender.getTasksByCriteriaV1();
 
@@ -161,7 +159,7 @@ describe('task', function () {
       });
 
       it('should return 200 with total and items when paginating', async function () {
-        await createJobnikTree(prisma, {}, {}, [{}, {}, {}]);
+        await createJobnikTree(drizzle, {}, {}, [{}, {}, {}]);
 
         const response = await requestSender.getTasksByCriteriaV1({ queryParams: { page: 1, page_size: 2 } });
 
@@ -176,7 +174,7 @@ describe('task', function () {
       });
 
       it('should return 200 with empty items array when page is beyond total', async function () {
-        await createJobnikTree(prisma, {}, {}, [{}]);
+        await createJobnikTree(drizzle, {}, {}, [{}]);
 
         const response = await requestSender.getTasksByCriteriaV1({ queryParams: { page: 9999, page_size: 10 } });
 
@@ -244,7 +242,7 @@ describe('task', function () {
   describe('#getTaskById', function () {
     describe('Happy Path', function () {
       it('should return 200 with the task', async function () {
-        const { tasks } = await createJobnikTree(prisma);
+        const { tasks } = await createJobnikTree(drizzle);
         const taskId = tasks[0]!.id;
 
         const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
@@ -291,10 +289,10 @@ describe('task', function () {
   describe('#getTaskByStageId', function () {
     describe('Happy Path', function () {
       it('should return 200 with the tasks', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [{}, {}]);
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [{}, {}]);
         const stageId = stage.id;
 
-        const getTasksResponse = await requestSender.getTasksByStageIdV1({ pathParams: { stageId: stageId as StageId } });
+        const getTasksResponse = await requestSender.getTasksByStageIdV1({ pathParams: { stageId: stageId } });
 
         expect(getTasksResponse).toSatisfyApiSpec();
 
@@ -314,10 +312,10 @@ describe('task', function () {
       });
 
       it('should return 200 with empty array when no tasks exist for stage', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
         const stageId = stage.id;
 
-        const getTaskResponse = await requestSender.getTasksByStageIdV1({ pathParams: { stageId: stageId as StageId } });
+        const getTaskResponse = await requestSender.getTasksByStageIdV1({ pathParams: { stageId: stageId } });
 
         expect(getTaskResponse).toSatisfyApiSpec();
         expect(getTaskResponse).toMatchObject({
@@ -327,11 +325,11 @@ describe('task', function () {
       });
 
       it('should return 200 with total and items when paginating', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [{}, {}, {}]);
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [{}, {}, {}]);
         const stageId = stage.id;
 
         const response = await requestSender.getTasksByStageIdV1({
-          pathParams: { stageId: stageId as StageId },
+          pathParams: { stageId: stageId },
           queryParams: { page: 1, page_size: 2 },
         });
 
@@ -344,11 +342,11 @@ describe('task', function () {
       });
 
       it('should return 200 with empty items array when page is beyond total', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [{}]);
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [{}]);
         const stageId = stage.id;
 
         const response = await requestSender.getTasksByStageIdV1({
-          pathParams: { stageId: stageId as StageId },
+          pathParams: { stageId: stageId },
           queryParams: { page: 9999, page_size: 10 },
         });
 
@@ -399,7 +397,7 @@ describe('task', function () {
     describe('Happy Path', function () {
       it("should return 201 and modify task's userMetadata", async function () {
         const userMetadataInput = { someTestKey: 'someTestData' };
-        const { tasks } = await createJobnikTree(prisma, {}, {}, [{}]);
+        const { tasks } = await createJobnikTree(drizzle, {}, {}, [{}]);
         const taskId = tasks[0]!.id;
 
         const updateUserMetadataResponse = await requestSender.updateTaskUserMetadataV1({
@@ -429,7 +427,7 @@ describe('task', function () {
       });
 
       it('should return 400 when request body is invalid', async function () {
-        const { tasks } = await createJobnikTree(prisma, {}, {}, [{}]);
+        const { tasks } = await createJobnikTree(drizzle, {}, {}, [{}]);
         const taskId = tasks[0]!.id;
 
         const response = await requestSender.updateTaskUserMetadataV1({
@@ -460,7 +458,7 @@ describe('task', function () {
   describe('#addTasks', function () {
     describe('Happy Path', function () {
       it('should return 200 and create tasks for stage', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
         const stageId = stage.id;
 
         const createTasksPayload = {
@@ -470,7 +468,7 @@ describe('task', function () {
 
         const response = await requestSender.addTasksV1({
           requestBody: [createTasksPayload],
-          pathParams: { stageId: stageId as StageId },
+          pathParams: { stageId: stageId },
         });
 
         expect(response).toSatisfyApiSpec();
@@ -481,25 +479,25 @@ describe('task', function () {
       });
 
       it('should count the added tasks as PENDING in the stage summary', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, { summary: defaultStatusCounts }, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, { summary: defaultStatusCounts }, [], { createStage: true, createTasks: false });
 
         const response = await requestSender.addTasksV1({
           requestBody: [
             { data: {}, userMetadata: {} },
             { data: {}, userMetadata: {} },
           ],
-          pathParams: { stageId: stage.id as StageId },
+          pathParams: { stageId: stage.id },
         });
 
         expect(response).toHaveProperty('status', StatusCodes.CREATED);
 
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id as StageId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id } });
 
         expect(getStageResponse.body).toHaveProperty('summary', { ...defaultStatusCounts, pending: 2, total: 2 });
       });
 
       it('should return 200 and create new tasks for stage with existing tasks', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [
           { status: TaskOperationStatus.COMPLETED, xstate: completedStageXstatePersistentSnapshot },
         ]);
 
@@ -512,7 +510,7 @@ describe('task', function () {
 
         const response = await requestSender.addTasksV1({
           requestBody: [createTasksPayload],
-          pathParams: { stageId: stageId as StageId },
+          pathParams: { stageId: stageId },
         });
 
         expect(response).toSatisfyApiSpec();
@@ -523,7 +521,7 @@ describe('task', function () {
       });
 
       it('should return 201 and create tasks with generated traceparent from active span', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
         const stageId = stage.id;
 
         const createTasksPayload = {
@@ -533,7 +531,7 @@ describe('task', function () {
 
         const createTaskResponse = await requestSender.addTasksV1({
           requestBody: [createTasksPayload],
-          pathParams: { stageId: stageId as StageId },
+          pathParams: { stageId: stageId },
         });
 
         await memoryExporter.forceFlush();
@@ -547,7 +545,7 @@ describe('task', function () {
       });
 
       it('should return 201 and create tasks with provided traceparent and tracestate', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
         const stageId = stage.id;
 
         const createTasksPayload = {
@@ -559,7 +557,7 @@ describe('task', function () {
 
         const createTaskResponse = await requestSender.addTasksV1({
           requestBody: [createTasksPayload],
-          pathParams: { stageId: stageId as StageId },
+          pathParams: { stageId: stageId },
         });
 
         expect(createTaskResponse).toSatisfyApiSpec();
@@ -574,7 +572,7 @@ describe('task', function () {
       });
 
       it('should return 201 and create tasks with provided traceparent without tracestate', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
         const stageId = stage.id;
 
         const createTasksPayload = {
@@ -585,7 +583,7 @@ describe('task', function () {
 
         const createTaskResponse = await requestSender.addTasksV1({
           requestBody: [createTasksPayload],
-          pathParams: { stageId: stageId as StageId },
+          pathParams: { stageId: stageId },
         });
 
         if (!Array.isArray(createTaskResponse.body)) {
@@ -617,11 +615,11 @@ describe('task', function () {
       });
 
       it('should return 400 when request body is incorrect', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
         const stageId = stage.id;
 
         const addTasksResponse = await requestSender.addTasksV1({
-          pathParams: { stageId: stageId as StageId },
+          pathParams: { stageId: stageId },
           requestBody: {} as unknown as [],
         });
 
@@ -633,7 +631,7 @@ describe('task', function () {
 
       it('should return 400 when attempting to add tasks to a finalized stage', async function () {
         const { stage } = await createJobnikTree(
-          prisma,
+          drizzle,
           {},
           { status: StageOperationStatus.ABORTED, xstate: abortedStageXstatePersistentSnapshot },
           [],
@@ -641,7 +639,7 @@ describe('task', function () {
         );
         const stageId = stage.id;
 
-        const addTasksResponse = await requestSender.addTasksV1({ requestBody: [], pathParams: { stageId: stageId as StageId } });
+        const addTasksResponse = await requestSender.addTasksV1({ requestBody: [], pathParams: { stageId: stageId } });
 
         expect(addTasksResponse).toSatisfyApiSpec();
         expect(addTasksResponse).toMatchObject({
@@ -652,7 +650,7 @@ describe('task', function () {
 
       it('should return 400 when attempting to add tasks to a running stage', async function () {
         const { stage } = await createJobnikTree(
-          prisma,
+          drizzle,
           { xstate: inProgressStageXstatePersistentSnapshot, status: JobOperationStatus.IN_PROGRESS, traceparent: DEFAULT_TRACEPARENT },
           { xstate: inProgressStageXstatePersistentSnapshot, status: JobOperationStatus.IN_PROGRESS },
           [],
@@ -660,7 +658,7 @@ describe('task', function () {
         );
         const stageId = stage.id;
 
-        const addTasksResponse = await requestSender.addTasksV1({ requestBody: [], pathParams: { stageId: stageId as StageId } });
+        const addTasksResponse = await requestSender.addTasksV1({ requestBody: [], pathParams: { stageId: stageId } });
 
         expect(addTasksResponse).toSatisfyApiSpec();
         expect(addTasksResponse).toMatchObject({
@@ -670,7 +668,7 @@ describe('task', function () {
       });
 
       it('should return 400 when traceparent format is invalid', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
         const stageId = stage.id;
 
         const createTasksPayload = {
@@ -681,7 +679,7 @@ describe('task', function () {
 
         const createTaskResponse = await requestSender.addTasksV1({
           requestBody: [createTasksPayload],
-          pathParams: { stageId: stageId as StageId },
+          pathParams: { stageId: stageId },
         });
 
         expect(createTaskResponse).toMatchObject({
@@ -723,14 +721,14 @@ describe('task', function () {
       });
 
       it('should return 500 and roll back the created tasks when updating the stage summary fails', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
         // the stage summary is updated after the tasks are inserted, so failing it proves the insert is rolled back
         const dbError = new DrizzleQueryError('update "job_manager"."stage"', [], new Error('stage summary update failed'));
         vi.spyOn(container.resolve(StageRepository), 'updateStageSummary').mockRejectedValueOnce(dbError);
 
         const response = await requestSender.addTasksV1({
           requestBody: [{ data: {}, userMetadata: {} }],
-          pathParams: { stageId: stage.id as StageId },
+          pathParams: { stageId: stage.id },
         });
 
         expect(response).toSatisfyApiSpec();
@@ -738,8 +736,8 @@ describe('task', function () {
           status: StatusCodes.INTERNAL_SERVER_ERROR,
           body: { code: 'DATABASE_RELATED_ERROR' },
         });
-        await expect(prisma.task.count({ where: { stageId: stage.id } })).resolves.toBe(0);
-        await expect(prisma.stage.findUnique({ where: { id: stage.id } })).resolves.toHaveProperty('summary', stage.summary);
+        await expect(drizzle.$count(taskTable, eq(taskTable.stageId, stage.id))).resolves.toBe(0);
+        await expect(drizzle.query.stage.findFirst({ where: { id: { eq: stage.id } } })).resolves.toHaveProperty('summary', stage.summary);
       });
     });
   });
@@ -752,7 +750,7 @@ describe('task', function () {
         const updateStatusInput = { status: TaskOperationStatus.COMPLETED };
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary: initialSummary },
           [{ status: TaskOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot }]
@@ -766,7 +764,7 @@ describe('task', function () {
         });
 
         const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id as StageId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
         expect(getTaskResponse.body).toMatchObject(updateStatusInput);
@@ -777,7 +775,7 @@ describe('task', function () {
         const updateStatusInput = { status: TaskOperationStatus.COMPLETED };
 
         const { tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           {},
           { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           [{ status: TaskOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot }]
@@ -802,7 +800,7 @@ describe('task', function () {
         const updateStatusInput = { status: TaskOperationStatus.FAILED };
 
         const { tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -833,7 +831,7 @@ describe('task', function () {
         const updateStatusInput = { status: TaskOperationStatus.COMPLETED };
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           {},
           { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary: initialSummary },
           [{ status: TaskOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, maxAttempts: 1 }]
@@ -848,7 +846,7 @@ describe('task', function () {
         });
 
         const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
         expect(getTaskResponse.body).toMatchObject(updateStatusInput);
@@ -862,7 +860,7 @@ describe('task', function () {
         const expectedStatus = { status: TaskOperationStatus.RETRIED, attempts: 1 };
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           {},
           { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary: initialSummary },
           [{ status: TaskOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, maxAttempts: 2, attempts: 0 }]
@@ -877,7 +875,7 @@ describe('task', function () {
         });
 
         const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
         expect(getTaskResponse.body).toMatchObject(expectedStatus);
@@ -891,7 +889,7 @@ describe('task', function () {
         const expectedStatus = { status: TaskOperationStatus.FAILED, attempts: 2 };
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary: initialSummary },
           [{ status: TaskOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, maxAttempts: 2, attempts: 1 }]
@@ -905,7 +903,7 @@ describe('task', function () {
           requestBody: updateStatusInput,
         });
         const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
         expect(getTaskResponse.body).toMatchObject(expectedStatus);
@@ -920,7 +918,7 @@ describe('task', function () {
         const expectedStageStatus = { status: TaskOperationStatus.IN_PROGRESS, percentage: 50, summary: expectedSummary };
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           {},
           { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary: initialSummary },
           [
@@ -938,7 +936,7 @@ describe('task', function () {
         });
 
         const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
         expect(getTaskResponse.body).toMatchObject(expectedTaskStatus);
@@ -953,14 +951,14 @@ describe('task', function () {
         const expectedStageStatus = { status: StageOperationStatus.COMPLETED, percentage: 100, summary: expectedSummary };
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary: initialSummary },
           [{ status: TaskOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot }]
         );
 
         const secondStage = await requestSender.addStageV1({
-          pathParams: { jobId: stage.jobId as JobId },
+          pathParams: { jobId: stage.jobId },
           requestBody: {
             type: 'Second Stage',
             data: {},
@@ -979,9 +977,9 @@ describe('task', function () {
         });
 
         const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId } });
         const getSecondStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: secondStage.body.id } });
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: stage.jobId as JobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: stage.jobId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
         expect(getTaskResponse.body).toMatchObject(expectedTaskStatus);
@@ -998,7 +996,7 @@ describe('task', function () {
         const expectedStageStatus = { status: StageOperationStatus.COMPLETED, percentage: 100, summary: expectedSummary };
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary: initialSummary },
           [{ status: TaskOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot }]
@@ -1013,8 +1011,8 @@ describe('task', function () {
         });
 
         const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: stage.jobId as JobId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: stage.jobId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
         expect(getTaskResponse.body).toMatchObject(expectedTaskStatus);
@@ -1026,7 +1024,7 @@ describe('task', function () {
     describe('Bad Path', function () {
       it('should return 400 with detailed error for invalid status transition', async function () {
         const { tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           {},
           { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           [{ status: TaskOperationStatus.CREATED }]
@@ -1086,8 +1084,7 @@ describe('task', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
-        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -1098,7 +1095,7 @@ describe('task', function () {
         const initialSummary = { ...defaultStatusCounts, pending: 1, total: 1 };
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, traceparent: DEFAULT_TRACEPARENT },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -1116,7 +1113,7 @@ describe('task', function () {
           pathParams: { stageType: 'SOME_TEST_TYPE_1' },
         });
 
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId } });
 
         expect(dequeueResponse).toSatisfyApiSpec();
         expect(dequeueResponse).toMatchObject({
@@ -1135,7 +1132,7 @@ describe('task', function () {
         const initialSummary = { ...defaultStatusCounts, pending: 1, total: 1 };
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, traceparent: DEFAULT_TRACEPARENT },
           {
             status: StageOperationStatus.PENDING,
@@ -1153,7 +1150,7 @@ describe('task', function () {
           pathParams: { stageType: 'SOME_TEST_TYPE_2' },
         });
 
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId } });
 
         expect(dequeueResponse).toSatisfyApiSpec();
         expect(dequeueResponse).toMatchObject({
@@ -1171,7 +1168,7 @@ describe('task', function () {
         const initialSummary = { ...defaultStatusCounts, pending: 1, total: 1 };
 
         const { job, stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.PENDING, xstate: pendingStageXstatePersistentSnapshot, traceparent: DEFAULT_TRACEPARENT },
           {
             status: StageOperationStatus.PENDING,
@@ -1190,8 +1187,8 @@ describe('task', function () {
           pathParams: { stageType: 'SOME_TEST_TYPE_3' },
         });
 
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId } });
 
         expect(dequeueResponse).toSatisfyApiSpec();
         expect(dequeueResponse).toMatchObject({
@@ -1217,7 +1214,7 @@ describe('task', function () {
             status: JobOperationStatus.IN_PROGRESS,
             traceparent: DEFAULT_TRACEPARENT,
           },
-          prisma
+          drizzle
         );
         const stageLowPriority = await addStageRecord(
           {
@@ -1228,11 +1225,11 @@ describe('task', function () {
             type: 'SOME_TEST_TYPE_DEQUEUE_BY_PRIORITY',
             xstate: inProgressStageXstatePersistentSnapshot,
           },
-          prisma
+          drizzle
         );
         const tasksLowPriority = await createTaskRecords(
           [{ ...createTaskBody, stageId: stageLowPriority.id, status: TaskOperationStatus.PENDING, xstate: pendingStageXstatePersistentSnapshot }],
-          prisma
+          drizzle
         );
         const jobMediumPriority = await addJobRecord(
           {
@@ -1243,7 +1240,7 @@ describe('task', function () {
             status: JobOperationStatus.IN_PROGRESS,
             traceparent: DEFAULT_TRACEPARENT,
           },
-          prisma
+          drizzle
         );
         const stageMediumPriority = await addStageRecord(
           {
@@ -1254,7 +1251,7 @@ describe('task', function () {
             type: 'SOME_TEST_TYPE_DEQUEUE_BY_PRIORITY',
             xstate: inProgressStageXstatePersistentSnapshot,
           },
-          prisma
+          drizzle
         );
         const tasksMediumPriority = await createTaskRecords(
           [
@@ -1265,7 +1262,7 @@ describe('task', function () {
               xstate: pendingStageXstatePersistentSnapshot,
             },
           ],
-          prisma
+          drizzle
         );
         const jobHighPriority = await addJobRecord(
           {
@@ -1276,7 +1273,7 @@ describe('task', function () {
             status: JobOperationStatus.IN_PROGRESS,
             traceparent: DEFAULT_TRACEPARENT,
           },
-          prisma
+          drizzle
         );
         const stageHighPriority = await addStageRecord(
           {
@@ -1287,11 +1284,11 @@ describe('task', function () {
             type: 'SOME_TEST_TYPE_DEQUEUE_BY_PRIORITY',
             xstate: inProgressStageXstatePersistentSnapshot,
           },
-          prisma
+          drizzle
         );
         const tasksHighPriority = await createTaskRecords(
           [{ ...createTaskBody, stageId: stageHighPriority.id, status: TaskOperationStatus.PENDING, xstate: pendingStageXstatePersistentSnapshot }],
-          prisma
+          drizzle
         );
         // Dequeue tasks, should return the task with high priority first
         const dequeueResponseHigh = await requestSender.dequeueTaskV1({
@@ -1339,25 +1336,25 @@ describe('task', function () {
         const summary = { ...defaultStatusCounts, pending: 1, total: 1 };
 
         await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.PAUSED, priority: Priority.VERY_HIGH },
           { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary, type: stageType },
           [pendingTask]
         );
         await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, priority: Priority.VERY_HIGH },
           { status: StageOperationStatus.WAITING, summary, type: stageType },
           [pendingTask]
         );
         const { tasks: lowPriorityTasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, priority: Priority.VERY_LOW },
           { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary, type: stageType },
           [pendingTask]
         );
         const { stage: highPriorityStage, tasks: highPriorityTasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, priority: Priority.HIGH },
           { status: StageOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, summary, type: stageType },
           [pendingTask]
@@ -1380,7 +1377,7 @@ describe('task', function () {
         const initialSummary = { ...defaultStatusCounts, pending: 1, total: 1 };
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, traceparent: DEFAULT_TRACEPARENT },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -1420,7 +1417,7 @@ describe('task', function () {
         const initialSummary = { ...defaultStatusCounts, retried: 1, total: 1 };
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, traceparent: DEFAULT_TRACEPARENT },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -1462,7 +1459,7 @@ describe('task', function () {
     describe('Bad Path', function () {
       it('should return 400 when stage type exceeds 50 characters', async function () {
         const longStageType = faker.string.alpha(51);
-        await prisma.$queryRaw(Prisma.sql`TRUNCATE TABLE "job_manager"."task" CASCADE;`);
+        await drizzle.execute(sql`TRUNCATE TABLE "job_manager"."task" CASCADE;`);
 
         const taskResponse = await requestSender.dequeueTaskV1({
           pathParams: { stageType: longStageType },
@@ -1479,7 +1476,7 @@ describe('task', function () {
       });
 
       it('should return 404 when no available task exists', async function () {
-        await prisma.$queryRaw(Prisma.sql`TRUNCATE TABLE "job_manager"."task" CASCADE;`);
+        await drizzle.execute(sql`TRUNCATE TABLE "job_manager"."task" CASCADE;`);
         const taskResponse = await requestSender.dequeueTaskV1({
           pathParams: { stageType: 'SOME_NON_EXIST_STAGE_TYPE' },
         });
@@ -1492,11 +1489,11 @@ describe('task', function () {
       });
 
       it('should return 404 when no PENDING task available', async function () {
-        await prisma.$queryRaw(Prisma.sql`TRUNCATE TABLE "job_manager"."task" CASCADE;`);
+        await drizzle.execute(sql`TRUNCATE TABLE "job_manager"."task" CASCADE;`);
         const initialSummary = { ...defaultStatusCounts, inProgress: 1, total: 1 };
 
         await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, traceparent: DEFAULT_TRACEPARENT },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -1526,7 +1523,7 @@ describe('task', function () {
         { stageStatus: StageOperationStatus.ABORTED },
       ])('should return 404 when the only PENDING task belongs to a $stageStatus stage', async function ({ stageStatus }) {
         await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           { status: stageStatus, summary: { ...defaultStatusCounts, pending: 1, total: 1 }, type: 'SOME_TEST_TYPE_INELIGIBLE_STAGE' },
           [{ status: TaskOperationStatus.PENDING, xstate: pendingStageXstatePersistentSnapshot }]
@@ -1549,7 +1546,7 @@ describe('task', function () {
         { jobStatus: JobOperationStatus.ABORTED },
       ])('should return 404 when the only PENDING task belongs to a $jobStatus job', async function ({ jobStatus }) {
         await createJobnikTree(
-          prisma,
+          drizzle,
           { status: jobStatus },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -1571,7 +1568,7 @@ describe('task', function () {
 
       it('should return 404 when the only task of the stage type is still CREATED', async function () {
         await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -1601,15 +1598,14 @@ describe('task', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
-        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
 
       it('should return 500 when transaction fails', async function () {
         const initialSummary = { ...defaultStatusCounts, pending: 1, total: 1 };
 
         const { job, stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.PENDING, xstate: inProgressStageXstatePersistentSnapshot, traceparent: DEFAULT_TRACEPARENT },
           {
             status: StageOperationStatus.PENDING,
@@ -1629,8 +1625,8 @@ describe('task', function () {
         });
 
         const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId } });
 
         expect(dequeueResponse).toSatisfyApiSpec();
         expect(dequeueResponse).toMatchObject({
@@ -1648,7 +1644,7 @@ describe('task', function () {
         const initialSummary = { ...defaultStatusCounts, pending: 1, total: 1 };
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, traceparent: DEFAULT_TRACEPARENT },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -1701,7 +1697,7 @@ describe('task', function () {
         const stageType = 'SOME_TEST_TYPE_CONCURRENT_DEQUEUE';
 
         const { stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -1726,8 +1722,10 @@ describe('task', function () {
         expect(tasks.map((task) => task.id)).toIncludeAllMembers(dequeuedIds);
         expect(otherStatuses).toSatisfyAll((status: number) => status === notFoundStatus);
 
-        await expect(prisma.task.count({ where: { stageId: stage.id, status: TaskOperationStatus.IN_PROGRESS } })).resolves.toBe(dequeuedIds.length);
-        await expect(prisma.stage.findUnique({ where: { id: stage.id } })).resolves.toHaveProperty('summary', {
+        await expect(
+          drizzle.$count(taskTable, and(eq(taskTable.stageId, stage.id), eq(taskTable.status, TaskOperationStatus.IN_PROGRESS)))
+        ).resolves.toBe(dequeuedIds.length);
+        await expect(drizzle.query.stage.findFirst({ where: { id: { eq: stage.id } } })).resolves.toHaveProperty('summary', {
           ...defaultStatusCounts,
           pending: taskCount - dequeuedIds.length,
           inProgress: dequeuedIds.length,
@@ -1739,7 +1737,7 @@ describe('task', function () {
         const initialSummary = { ...defaultStatusCounts, pending: 1, total: 1 };
 
         const { tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, traceparent: DEFAULT_TRACEPARENT },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -1774,7 +1772,7 @@ describe('task', function () {
         const initialSummary = { ...defaultStatusCounts, inProgress: 1, total: 1 };
 
         const { tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, traceparent: DEFAULT_TRACEPARENT },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -1796,14 +1794,11 @@ describe('task', function () {
         const lockHeld = new Promise<void>((resolve) => {
           signalLockHeld = resolve;
         });
-        const lockHolder = prisma.$transaction(
-          async (tx) => {
-            await tx.$executeRaw`SELECT 1 FROM "job_manager"."task" WHERE id = ${taskId}::uuid FOR UPDATE`;
-            signalLockHeld();
-            await lockReleased;
-          },
-          { timeout: LOCK_HOLDER_TIMEOUT_MS }
-        );
+        const lockHolder = drizzle.transaction(async (tx) => {
+          await tx.execute(sql`SELECT 1 FROM "job_manager"."task" WHERE id = ${taskId}::uuid FOR UPDATE`);
+          signalLockHeld();
+          await lockReleased;
+        });
         await lockHeld;
 
         // Start both update operations concurrently (simulating 2 workers completing the same task)
@@ -1812,7 +1807,7 @@ describe('task', function () {
           requestSender.updateTaskStatusV1({ pathParams: { taskId: taskId }, requestBody: { status: TaskOperationStatus.COMPLETED } }),
         ];
 
-        await waitForBlockedTaskUpdates(prisma, updatePromises.length);
+        await waitForBlockedTaskUpdates(drizzle, updatePromises.length);
         releaseLock();
         await lockHolder;
 

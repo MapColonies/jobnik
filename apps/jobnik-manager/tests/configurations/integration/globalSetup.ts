@@ -38,7 +38,7 @@ export async function setup(): Promise<void> {
   // Same runner as the deploy-time migration command (src/db/runMigrations.ts).
   const pool = await initConnection(getConfig().get('db'));
   try {
-    await runMigrations(createDrizzle(pool));
+    await runMigrations(createDrizzle(pool, { transactionTimeoutMs: 0 }));
   } finally {
     await pool.end();
   }

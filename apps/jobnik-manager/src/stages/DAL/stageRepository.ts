@@ -4,11 +4,11 @@ import { and, eq, max, relationsFilterToSQL, sql, type SQL } from 'drizzle-orm';
 import { DEFAULT_PAGE_SIZE, paginationParamsToOffsetAndLimit } from '@map-colonies/drizzle-utils';
 import type { JobId, StageId } from 'jobnik-openapi';
 import { SERVICES } from '@src/common/constants';
-import type { Drizzle, DrizzleTx, StageFilter } from '@src/db/drizzle';
+import type { Drizzle, DrizzleTx, TableFilter } from '@src/db/drizzle';
 import { stageTable } from '@src/db/entities';
 import { StageOperationStatus } from '@src/db/persistenceModel';
 import type { PaginatedResult } from '@src/common/utils/pagination';
-import type { StageEntity, StageEntityOptions, StageRow, StageSearchParams, StageSummary, UpdateSummaryCount } from '../models/models';
+import type { StageRowWithRelations, StageRowOptions, StageRow, StageSearchParams, StageSummary, UpdateSummaryCount } from '../models/models';
 import { summaryCountsMapper, taskOperationStatusWithTotal } from '../models/helper';
 
 const DEFAULT_PAGE = 1;
@@ -29,8 +29,8 @@ export class StageRepository {
     const { page = DEFAULT_PAGE, pageSize = DEFAULT_PAGE_SIZE, jobId, type, status, includeTasks } = params;
 
     // Relational filters skip undefined values, so unset criteria don't filter.
-    // The branded job id goes through `eq`, as the filter can't tell it apart from an operator object.
-    const where = { jobId: { eq: jobId }, type, status } satisfies StageFilter;
+    // The branded job id goes through `eq`, as the filter's types don't accept a branded id as a plain value.
+    const where = { jobId: { eq: jobId }, type, status } satisfies TableFilter<'stage'>;
 
     const { limit, offset } = paginationParamsToOffsetAndLimit({ page, pageSize });
 
@@ -53,7 +53,7 @@ export class StageRepository {
    * @param options - which relations to load, and an optional transaction to run the query in
    * @returns the stage, with the requested relations, or undefined if it doesn't exist
    */
-  public async findStageById<T extends StageEntityOptions>(stageId: StageId, options: T): Promise<StageEntity<T> | undefined> {
+  public async findStageById<T extends StageRowOptions>(stageId: StageId, options: T): Promise<StageRowWithRelations<T> | undefined> {
     return (options.tx ?? this.drizzle).query.stage.findFirst({
       where: { id: { eq: stageId } },
       with: { tasks: options.includeTasks === true ? true : undefined, job: options.includeJob === true ? true : undefined },

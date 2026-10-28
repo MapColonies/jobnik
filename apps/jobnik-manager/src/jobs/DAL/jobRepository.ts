@@ -3,7 +3,7 @@ import { relationsFilterToSQL } from 'drizzle-orm';
 import { DEFAULT_PAGE_SIZE, paginationParamsToOffsetAndLimit } from '@map-colonies/drizzle-utils';
 import type { JobId } from 'jobnik-openapi';
 import { SERVICES } from '@src/common/constants';
-import type { Drizzle, DrizzleTx, JobFilter } from '@src/db/drizzle';
+import type { Drizzle, DrizzleTx, TableFilter } from '@src/db/drizzle';
 import { jobTable } from '@src/db/entities';
 import type { PaginatedResult } from '@src/common/utils/pagination';
 import type { JobRow, JobSearchParams } from '../models/models';
@@ -27,7 +27,7 @@ export class JobRepository {
       name,
       priority,
       creationTime: { gte: fromDate, lte: endDate },
-    } satisfies JobFilter;
+    } satisfies TableFilter<'job'>;
 
     const { limit, offset } = paginationParamsToOffsetAndLimit({ page, pageSize });
 

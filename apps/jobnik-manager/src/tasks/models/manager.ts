@@ -53,7 +53,7 @@ export class TaskManager {
     createTaskActor.send({ type: 'pend' });
     const persistenceSnapshot = createTaskActor.getPersistedSnapshot();
 
-    const stage = await this.stageManager.getStageEntityById(stageId);
+    const stage = await this.stageManager.getStageRowById(stageId);
 
     if (!stage) {
       this.logger.error(`Failed adding tasks to stage, stage not exists`);
@@ -136,7 +136,7 @@ export class TaskManager {
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
     });
 
-    const task = await this.getTaskEntityById(taskId);
+    const task = await this.getTaskRowById(taskId);
 
     if (!task) {
       throw new TaskNotFoundError(tasksErrorMessages.taskNotFound);
@@ -217,12 +217,12 @@ export class TaskManager {
   }
 
   /**
-   * This method is used to get a task entity by its id from the database.
+   * This method is used to get a task row by its id from the database.
    * @param taskId unique identifier of the task.
-   * @returns The task entity if found, otherwise undefined.
+   * @returns The task row if found, otherwise undefined.
    */
   @withSpanAsyncV4
-  public async getTaskEntityById(taskId: TaskId, tx?: DrizzleTx): Promise<Task | undefined> {
+  public async getTaskRowById(taskId: TaskId, tx?: DrizzleTx): Promise<Task | undefined> {
     trace.getActiveSpan()?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
     });
@@ -318,7 +318,7 @@ export class TaskManager {
    */
   @withSpanAsyncV4
   private async executeUpdateStatus(taskId: TaskId, status: TaskOperationStatus, tx: DrizzleTx): Promise<TaskModel> {
-    const task = await this.getTaskEntityById(taskId, tx);
+    const task = await this.getTaskRowById(taskId, tx);
 
     if (!task) {
       throw new TaskNotFoundError(tasksErrorMessages.taskNotFound);
@@ -409,7 +409,7 @@ export class TaskManager {
     // For now, all task failures cause stage failure, but in future versions
     // some stages may be configured as optional (non-blocking)
     if (nextStatus === TaskOperationStatus.FAILED) {
-      const stage = await this.stageManager.getStageEntityById(task.stageId, { tx });
+      const stage = await this.stageManager.getStageRowById(task.stageId, { tx });
 
       /* v8 ignore next 7 -- @preserve */
       if (!stage) {
