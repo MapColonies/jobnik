@@ -10,13 +10,6 @@ const persistedSnapshot = createActor(taskStateMachine).start().getPersistedSnap
 
 const LOCK_WAIT_TIMEOUT_MS = 10_000;
 const LOCK_WAIT_POLL_INTERVAL_MS = 20;
-const TEST_TRIGGER_NAME = 'jobnik_test_trigger';
-
-// Trigger function bodies used to make real updates fail or affect no rows, instead of mocking the database client
-const triggerFunctions = {
-  fail: { name: 'jobnik_test_fail_update', body: "BEGIN RAISE EXCEPTION 'update failed by test trigger'; END;" },
-  skip: { name: 'jobnik_test_skip_update', body: 'BEGIN RETURN NULL; END;' },
-} as const;
 
 export const createTaskRecords = async (body: Prisma.TaskCreateManyInput[], prisma: PrismaClient): Promise<Task[]> => {
   // Cast because Prisma rows carry no Branded IDs; the fixtures move to Drizzle with the integration setup.
@@ -32,37 +25,6 @@ export const createTaskBody = {
   traceparent: DEFAULT_TRACEPARENT,
   tracestate: null,
 } satisfies Prisma.TaskCreateManyInput;
-
-/**
- * Installs a BEFORE UPDATE trigger on some rows of a table. Remove it with {@link dropTriggerOnUpdate}.
- * @param prisma - the fixtures' client
- * @param table - the table in the job_manager schema
- * @param rowIds - the ids of the rows whose updates the trigger intercepts
- * @param behavior - 'fail' raises an error, 'skip' makes the update affect no rows
- */
-export async function createTriggerOnUpdate(
-  prisma: PrismaClient,
-  table: 'stage' | 'task',
-  rowIds: string[],
-  behavior: keyof typeof triggerFunctions
-): Promise<void> {
-  const { name, body } = triggerFunctions[behavior];
-  const ids = rowIds.map((id) => `'${id}'::uuid`).join(', ');
-
-  await prisma.$executeRawUnsafe(`CREATE OR REPLACE FUNCTION "job_manager"."${name}"() RETURNS trigger AS $$ ${body} $$ LANGUAGE plpgsql`);
-  await prisma.$executeRawUnsafe(
-    `CREATE TRIGGER ${TEST_TRIGGER_NAME} BEFORE UPDATE ON "job_manager"."${table}" FOR EACH ROW WHEN (OLD.id IN (${ids})) EXECUTE FUNCTION "job_manager"."${name}"()`
-  );
-}
-
-/**
- * Removes the trigger installed by {@link createTriggerOnUpdate}.
- * @param prisma - the fixtures' client
- * @param table - the table the trigger was installed on
- */
-export async function dropTriggerOnUpdate(prisma: PrismaClient, table: 'stage' | 'task'): Promise<void> {
-  await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS ${TEST_TRIGGER_NAME} ON "job_manager"."${table}"`);
-}
 
 /**
  * Waits until the given number of task UPDATEs are blocked waiting for a row lock.

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import { describe, beforeEach, afterEach, it, expect, beforeAll } from 'vitest';
+import { describe, beforeEach, afterEach, it, expect, beforeAll, vi } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
 import { jsLogger } from '@map-colonies/js-logger';
 import { trace } from '@opentelemetry/api';
@@ -13,6 +13,7 @@ import {
 } from '@map-colonies/openapi-helpers/requestSender';
 import { faker } from '@faker-js/faker';
 import { openapiFilePath, type paths, type operations, type JobId, type StageId, type TaskId } from 'jobnik-openapi';
+import { DrizzleQueryError } from 'drizzle-orm';
 import { Prisma, type PrismaClient } from '@prismaClient';
 import { getApp } from '@src/app';
 import { SERVICES } from '@common/constants';
@@ -29,12 +30,14 @@ import {
   retryTaskXstatePersistentSnapshot,
 } from '@tests/unit/data';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
+import { StageRepository } from '@src/stages/DAL/stageRepository';
+import { TaskRepository } from '@src/tasks/DAL/taskRepository';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 import { JobOperationStatus, Priority, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 import { createJobRequestBody } from '../jobs/helpers';
 import { addJobRecord, addStageRecord, createStageBody } from '../stages/helpers';
 import { createJobnikTree, endDatabasePool, truncateAllTables } from '../common/utils';
-import { createTaskBody, createTaskRecords, createTriggerOnUpdate, dropTriggerOnUpdate, waitForBlockedTaskUpdates } from './helpers';
+import { createTaskBody, createTaskRecords, waitForBlockedTaskUpdates } from './helpers';
 
 const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(expect);
 
@@ -70,6 +73,7 @@ describe('task', function () {
   });
 
   afterEach(async function () {
+    vi.restoreAllMocks();
     await prisma.$disconnect();
     await endDatabasePool(container);
     memoryExporter.reset();
@@ -101,6 +105,30 @@ describe('task', function () {
         expect(response).toMatchObject({
           status: StatusCodes.OK,
           body: { total: 1, items: [{ id: tasks[0]!.id }] },
+        });
+        expect(response.body).toHaveProperty('items.length', 1);
+      });
+
+      it('should return 200 with only the tasks created within the from_date and end_date range', async function () {
+        const now = Date.now();
+        const { tasks } = await createJobnikTree(prisma, {}, { type: 'SOME_TEST_TYPE_DATE_RANGE' }, [
+          { creationTime: new Date(now - 3 * 60 * 60 * 1000) },
+          { creationTime: new Date(now - 60 * 60 * 1000) },
+          { creationTime: new Date(now + 60 * 60 * 1000) },
+        ]);
+
+        const response = await requestSender.getTasksByCriteriaV1({
+          queryParams: {
+            stage_type: 'SOME_TEST_TYPE_DATE_RANGE',
+            from_date: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+            end_date: new Date(now).toISOString(),
+          },
+        });
+
+        expect(response).toSatisfyApiSpec();
+        expect(response).toMatchObject({
+          status: StatusCodes.OK,
+          body: { total: 1, items: [{ id: tasks[1]!.id }] },
         });
         expect(response.body).toHaveProperty('items.length', 1);
       });
@@ -697,17 +725,13 @@ describe('task', function () {
       it('should return 500 and roll back the created tasks when updating the stage summary fails', async function () {
         const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
         // the stage summary is updated after the tasks are inserted, so failing it proves the insert is rolled back
-        await createTriggerOnUpdate(prisma, 'stage', [stage.id], 'fail');
+        const dbError = new DrizzleQueryError('update "job_manager"."stage"', [], new Error('stage summary update failed'));
+        vi.spyOn(container.resolve(StageRepository), 'updateStageSummary').mockRejectedValueOnce(dbError);
 
-        let response;
-        try {
-          response = await requestSender.addTasksV1({
-            requestBody: [{ data: {}, userMetadata: {} }],
-            pathParams: { stageId: stage.id as StageId },
-          });
-        } finally {
-          await dropTriggerOnUpdate(prisma, 'stage');
-        }
+        const response = await requestSender.addTasksV1({
+          requestBody: [{ data: {}, userMetadata: {} }],
+          pathParams: { stageId: stage.id as StageId },
+        });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -1727,16 +1751,11 @@ describe('task', function () {
         );
 
         // Skip the task's update, as if the task was modified between lock and update - no rows are updated
-        await createTriggerOnUpdate(prisma, 'task', [tasks[0]!.id], 'skip');
+        const updateTaskSpy = vi.spyOn(container.resolve(TaskRepository), 'updateTaskIfStatusUnchanged').mockResolvedValueOnce(undefined);
 
-        let response;
-        try {
-          response = await requestSender.dequeueTaskV1({
-            pathParams: { stageType: 'SOME_TEST_TYPE_DEQUEUE_RACE_CONFLICT' },
-          });
-        } finally {
-          await dropTriggerOnUpdate(prisma, 'task');
-        }
+        const response = await requestSender.dequeueTaskV1({
+          pathParams: { stageType: 'SOME_TEST_TYPE_DEQUEUE_RACE_CONFLICT' },
+        });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -1746,6 +1765,7 @@ describe('task', function () {
             code: 'TASK_STATUS_UPDATE_FAILED',
           },
         });
+        expect(updateTaskSpy).toHaveBeenCalledWith(tasks[0]!.id, TaskOperationStatus.PENDING, expect.anything(), expect.anything());
       });
 
       it('should handle multiple concurrent updateStatus operations with race condition protection', async function () {

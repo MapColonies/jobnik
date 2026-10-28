@@ -13,7 +13,7 @@ import {
   TaskNotFoundError,
   TaskStatusUpdateFailedError,
 } from 'jobnik-openapi';
-import { and, eq, type SQL } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { SERVICES, XSTATE_DONE_STATE } from '@common/constants';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
 import { StageManager } from '@src/stages/models/manager';
@@ -116,7 +116,15 @@ export class TaskManager {
    */
   @withSpanAsyncV4
   public async getTasks(params: TasksFindCriteriaArg): Promise<TasksPaginatedResponse> {
-    const { total, items: tasks } = await this.taskRepository.findTasks(params);
+    const { total, items: tasks } = await this.taskRepository.findTasks({
+      stageId: params?.stage_id,
+      stageType: params?.stage_type,
+      status: params?.status,
+      fromDate: params?.from_date !== undefined ? new Date(params.from_date) : undefined,
+      endDate: params?.end_date !== undefined ? new Date(params.end_date) : undefined,
+      page: params?.page,
+      pageSize: params?.page_size,
+    });
 
     return { total, items: convertArrayTaskRowToResponse(tasks) };
   }
@@ -146,8 +154,7 @@ export class TaskManager {
     // To validate existence of stage, if not will throw StageNotFoundError
     await this.stageManager.getStageById(stageId);
 
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    const { total, items: tasks } = await this.taskRepository.findTasks({ stage_id: stageId, page: query?.page, page_size: query?.page_size });
+    const { total, items: tasks } = await this.taskRepository.findTasks({ stageId, page: query?.page, pageSize: query?.page_size });
 
     const items = convertArrayTaskRowToResponse(tasks);
     return { total, items };
@@ -377,12 +384,13 @@ export class TaskManager {
     const endTime: Date | undefined = newPersistedSnapshot.status === 'done' ? new Date() : undefined;
 
     // Update with race condition protection: only applies if the status is still the one read
-    const updatedTasks = await tx
-      .update(taskTable)
-      .set({ ...taskDataToUpdate, status: nextStatus, xstate: newPersistedSnapshot, startTime, endTime })
-      .where(this.createUpdateWhereClause(task.id, previousStatus))
-      .returning();
-    if (updatedTasks[0] === undefined) {
+    const updatedTask = await this.taskRepository.updateTaskIfStatusUnchanged(
+      task.id,
+      previousStatus,
+      { ...taskDataToUpdate, status: nextStatus, xstate: newPersistedSnapshot, startTime, endTime },
+      tx
+    );
+    if (updatedTask === undefined) {
       // Race condition detected: another process already modified this task
       this.logger.warn({
         msg: 'Task status update failed - race condition detected',
@@ -410,7 +418,7 @@ export class TaskManager {
       }
 
       if (stage.status === StageOperationStatus.FAILED) {
-        return updatedTasks[0];
+        return updatedTask;
       }
 
       this.logger.info({
@@ -423,7 +431,7 @@ export class TaskManager {
       trace.getActiveSpan()?.addEvent('Stage set to FAILED', { stageId: task.stageId });
     }
 
-    return updatedTasks[0];
+    return updatedTask;
   }
 
   /**
@@ -450,21 +458,6 @@ export class TaskManager {
     const nextStatus = didTaskFail ? TaskOperationStatus.FAILED : TaskOperationStatus.RETRIED;
 
     return { nextStatus, taskDataToUpdate };
-  }
-
-  /**
-   * Generates the query filter for task updates using optimistic locking.
-   * * By including `previousStatus` in the WHERE clause, we ensure that state
-   * transitions (e.g., PENDING → IN_PROGRESS) only occur if no other worker
-   * has modified the task in the interim.
-   *
-   * @param taskId - The ID of the task to update.
-   * @param nextStatus - The target status.
-   * @param previousStatus - The expected current status to prevent race conditions.
-   * @returns The filter for the update query.
-   */
-  private createUpdateWhereClause(taskId: TaskId, previousStatus: TaskOperationStatus): SQL | undefined {
-    return and(eq(taskTable.id, taskId), eq(taskTable.status, previousStatus));
   }
 
   private async updateStageSummary(
