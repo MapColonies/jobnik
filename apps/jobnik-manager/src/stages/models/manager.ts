@@ -115,7 +115,14 @@ export class StageManager {
 
   @withSpanAsyncV4
   public async getStages(params: StageFindCriteriaArg): Promise<StagesPaginatedResponse> {
-    const { total, items: stages } = await this.stageRepository.findStages(params);
+    const { total, items: stages } = await this.stageRepository.findStages({
+      jobId: params?.job_id,
+      type: params?.stage_type,
+      status: params?.stage_operation_status,
+      includeTasks: params?.should_return_tasks,
+      page: params?.page,
+      pageSize: params?.page_size,
+    });
 
     const items = convertArrayStageRowToResponse(stages);
     return { total, items };
@@ -215,14 +222,7 @@ export class StageManager {
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
     });
 
-    if (options.includeTasks === true || options.includeJob === true) {
-      return this.stageRepository.findStageWithRelationsById(stageId, options);
-    }
-
-    const drizzle = options.tx ?? this.drizzle;
-    const stage = await drizzle.query.stage.findFirst({ where: { id: { eq: stageId } } });
-
-    return stage as StageEntity<T> | undefined;
+    return this.stageRepository.findStageById(stageId, options);
   }
 
   /**
@@ -284,7 +284,7 @@ export class StageManager {
     // can't move to PENDING if previous stage is not COMPLETED
     if (targetStatus === StageOperationStatus.PENDING && previousStageOrder > 0) {
       const previousStage = await tx.query.stage.findFirst({
-        where: { jobId: { eq: stage.jobId }, order: previousStageOrder },
+        where: { jobId: { eq: stage.jobId }, order: { eq: previousStageOrder } },
       });
 
       if (previousStage!.status !== StageOperationStatus.COMPLETED) {
@@ -311,7 +311,7 @@ export class StageManager {
     if (targetStatus === StageOperationStatus.COMPLETED) {
       const nextStageOrder = stage.order + 1;
       const nextStage = await tx.query.stage.findFirst({
-        where: { jobId: { eq: stage.jobId }, order: nextStageOrder },
+        where: { jobId: { eq: stage.jobId }, order: { eq: nextStageOrder } },
       });
 
       if (nextStage?.status === StageOperationStatus.CREATED) {

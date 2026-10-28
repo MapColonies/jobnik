@@ -15,6 +15,9 @@ export type DrizzleTx = Parameters<Parameters<Drizzle['transaction']>[0]>[0];
 /** A relational query filter on the job table; keys whose value is undefined are ignored. */
 export type JobFilter = RelationsFilter<(typeof relations)['job'], typeof relations>;
 
+/** A relational query filter on the stage table; keys whose value is undefined are ignored. */
+export type StageFilter = RelationsFilter<(typeof relations)['stage'], typeof relations>;
+
 export function createDrizzle(pool: Pool): Drizzle {
   return drizzle({ client: pool, relations });
 }
