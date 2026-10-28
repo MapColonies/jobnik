@@ -1,19 +1,15 @@
-import type { Snapshot } from 'xstate';
 import type { Task } from '@src/db/persistenceModel';
-import type { findAndLockTask } from '@src/db/prisma/generated/client/sql';
-import type { TaskModel, TaskPrismaObject } from './models';
+import type { TaskModel } from './models';
 
 /**
- * This function converts a Prisma stage object to a TaskModel API object.
- * @param prismaObjects db entity
+ * This function converts a task row to a TaskModel API object.
+ * @param taskRow db row
  * @returns TaskModel
  */
-export function convertPrismaToTaskResponse(prismaObjects: Task): TaskModel {
-  const { data, userMetadata, xstate, creationTime, tracestate, startTime, endTime, updateTime, ...rest } = prismaObjects;
+export function convertTaskRowToResponse(taskRow: Task): TaskModel {
+  const { xstate, creationTime, tracestate, startTime, endTime, updateTime, ...rest } = taskRow;
 
   const transformedFields = {
-    data: data as Record<string, unknown>,
-    userMetadata: userMetadata as { [key: string]: unknown },
     updateTime: updateTime.toISOString(),
     creationTime: creationTime.toISOString(),
     tracestate: tracestate ?? undefined,
@@ -21,29 +17,14 @@ export function convertPrismaToTaskResponse(prismaObjects: Task): TaskModel {
     endTime: endTime ? endTime.toISOString() : undefined,
   };
 
-  return Object.assign(rest, transformedFields) as TaskModel;
+  return Object.assign(rest, transformedFields);
 }
 
 /**
- * This function converts an array of Prisma task objects to an array of TaskModel API objects.
- * @param prismaObjects array of db entities
+ * This function converts an array of task rows to an array of TaskModel API objects.
+ * @param taskRows array of db rows
  * @returns array of TaskModel
  */
-export function convertArrayPrismaTaskToTaskResponse(prismaObjects: Task[]): TaskModel[] {
-  return prismaObjects.map((task) => convertPrismaToTaskResponse(task));
-}
-
-/**
- * This function converts a Prisma stage object to a TaskModel API object.
- * @param prismaObjects db entity
- * @returns TaskModel
- */
-export function convertRawToTaskModel(raw: findAndLockTask.Result): TaskPrismaObject {
-  return {
-    ...raw,
-    stageId: raw.stage_id, // Handle camelCase conversion
-    data: raw.data as Record<string, unknown>,
-    userMetadata: (raw.user_metadata ?? {}) as Record<string, unknown>,
-    xstate: raw.xstate as unknown as Snapshot<unknown>,
-  } as unknown as TaskPrismaObject;
+export function convertArrayTaskRowToResponse(taskRows: Task[]): TaskModel[] {
+  return taskRows.map((task) => convertTaskRowToResponse(task));
 }

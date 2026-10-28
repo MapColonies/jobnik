@@ -4,6 +4,7 @@ import { jsLogger } from '@map-colonies/js-logger';
 import { trace } from '@opentelemetry/api';
 import { addMinutes, subMinutes } from 'date-fns';
 import type { StageId } from 'jobnik-openapi';
+import { DrizzleQueryError } from 'drizzle-orm';
 import { type PrismaClient } from '@prismaClient';
 import { getApp } from '@src/app';
 import { SERVICES } from '@common/constants';
@@ -11,7 +12,7 @@ import { getConfig, initConfig } from '@src/common/config';
 import { inProgressStageXstatePersistentSnapshot } from '@tests/unit/data';
 import { defaultStatusCounts } from '@src/stages/models/helper';
 import { TaskManager } from '@src/tasks/models/manager';
-import { createProxyMock } from '@tests/configurations/mockPrisma';
+import { TaskRepository } from '@src/tasks/DAL/taskRepository';
 import { TaskOperationStatus, StageOperationStatus, JobOperationStatus } from '@src/db/persistenceModel';
 import { createJobnikTree, endDatabasePool, truncateAllTables } from '../common/utils';
 
@@ -36,12 +37,11 @@ describe('TaskSweeper', () => {
     prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
     taskManager = container.resolve(TaskManager);
     await truncateAllTables(prisma);
-
-    // Ensure Prisma methods exist before they can be spied on (Vitest 4.0 requirement)
   });
 
   afterEach(async function () {
     await prisma.$disconnect();
+    vi.restoreAllMocks();
     await endDatabasePool(container);
     vi.resetModules();
   });
@@ -69,6 +69,18 @@ describe('TaskSweeper', () => {
     const getTaskStatuses = async (stageId: StageId): Promise<TaskOperationStatus[]> => {
       const tasks = await prisma.task.findMany({ where: { stageId }, select: { status: true } });
       return tasks.map((task) => task.status).sort();
+    };
+
+    // Makes the status update of the given tasks fail, letting the others through
+    const failTaskUpdates = (taskIds: string[]): void => {
+      const taskRepository = container.resolve(TaskRepository);
+      const updateTask = taskRepository.updateTaskIfStatusUnchanged.bind(taskRepository);
+      vi.spyOn(taskRepository, 'updateTaskIfStatusUnchanged').mockImplementation(async (taskId, ...rest) => {
+        if (taskIds.includes(taskId)) {
+          throw new DrizzleQueryError('update "job_manager"."task"', [], new Error('task update failed'));
+        }
+        return updateTask(taskId, ...rest);
+      });
     };
 
     describe('Happy Path', function () {
@@ -296,32 +308,24 @@ describe('TaskSweeper', () => {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const findManySpy = createProxyMock(prisma.task, 'findMany');
-        findManySpy.mockRejectedValueOnce(new Error('Database error'));
+      it('should reject when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         await expect(taskManager.cleanStaleTasks()).toReject();
       });
 
       it('should keep cleaning the remaining stale tasks when updating one of them fails', async function () {
-        const { stage } = await createStageWithStaleTasks(2);
-        const originalTransaction = prisma.$transaction.bind(prisma);
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-        transactionSpy.mockImplementation(originalTransaction);
-        transactionSpy.mockRejectedValueOnce(new Error('Database error'));
+        const { stage, tasks } = await createStageWithStaleTasks(2);
+        failTaskUpdates([tasks[0]!.id]);
 
         await expect(taskManager.cleanStaleTasks()).toResolve();
 
         await expect(getTaskStatuses(stage.id as StageId)).resolves.toEqual([TaskOperationStatus.FAILED, TaskOperationStatus.IN_PROGRESS].sort());
       });
 
-      it.each([
-        { errorKind: 'an Error', error: new Error('Database error') },
-        { errorKind: 'a non-Error value', error: 'Database error' },
-      ])('should resolve and leave the tasks untouched when every update throws $errorKind', async function ({ error }) {
-        const { stage } = await createStageWithStaleTasks(2);
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-        transactionSpy.mockRejectedValue(error);
+      it('should resolve and leave the tasks untouched when every update fails', async function () {
+        const { stage, tasks } = await createStageWithStaleTasks(2);
+        failTaskUpdates(tasks.map((task) => task.id));
 
         await expect(taskManager.cleanStaleTasks()).toResolve();
 

@@ -13,30 +13,29 @@ import {
   TaskNotFoundError,
   TaskStatusUpdateFailedError,
 } from 'jobnik-openapi';
-import { Prisma, type PrismaClient } from '@prismaClient';
+import { eq } from 'drizzle-orm';
 import { SERVICES, XSTATE_DONE_STATE } from '@common/constants';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
 import { StageManager } from '@src/stages/models/manager';
-import { prismaKnownErrors } from '@src/common/errors';
 import { errorMessages as stagesErrorMessages } from '@src/stages/models/errors';
 import { taskStateMachine, updateTaskMachineState } from '@src/tasks/models/taskStateMachine';
 import { stageStateMachine } from '@src/stages/models/stageStateMachine';
 import { type ConfigType } from '@src/common/config';
 import type { UpdateSummaryCount } from '@src/stages/models/models';
-import type { PrismaTransaction } from '@src/db/types';
+import type { Drizzle, DrizzleTx } from '@src/db/drizzle';
+import { taskTable } from '@src/db/entities';
 import { ATTR_MESSAGING_DESTINATION_NAME, ATTR_MESSAGING_MESSAGE_ID } from '@src/common/semconv';
-import { paginate } from '@src/common/utils/pagination';
-import { StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
+import { type NewTask, type Task, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 import { TaskRepository } from '../DAL/taskRepository';
-import type { TasksFindCriteriaArg, TaskModel, TaskPrismaObject, TaskCreateModel, TasksPaginatedResponse, TasksByStageIdQuery } from './models';
+import type { TasksFindCriteriaArg, TaskModel, TaskCreateModel, TasksPaginatedResponse, TasksByStageIdQuery } from './models';
 import { errorMessages as tasksErrorMessages } from './errors';
-import { convertArrayPrismaTaskToTaskResponse, convertPrismaToTaskResponse } from './helper';
+import { convertArrayTaskRowToResponse, convertTaskRowToResponse } from './helper';
 
 @injectable()
 export class TaskManager {
   public constructor(
     @inject(SERVICES.LOGGER) private readonly logger: Logger,
-    @inject(SERVICES.PRISMA) private readonly prisma: PrismaClient,
+    @inject(SERVICES.DRIZZLE) private readonly drizzle: Drizzle,
     @inject(SERVICES.TRACER) public readonly tracer: Tracer,
     @inject(StageManager) private readonly stageManager: StageManager,
     @inject(SERVICES.CONFIG) private readonly config: ConfigType,
@@ -87,16 +86,12 @@ export class TaskManager {
         stageId,
         traceparent,
         tracestate,
-      } satisfies Prisma.TaskCreateManyInput;
+      } satisfies NewTask;
     });
 
-    const queryBody = {
-      data: taskInput,
-    };
-
     try {
-      const tasks = await this.prisma.$transaction(async (tx) => {
-        const tasks = await tx.task.createManyAndReturn(queryBody);
+      const tasks = await this.drizzle.transaction(async (tx) => {
+        const tasks = await tx.insert(taskTable).values(taskInput).returning();
 
         const updateSummaryPayload: UpdateSummaryCount = {
           add: { status: TaskOperationStatus.PENDING, count: tasks.length },
@@ -106,7 +101,7 @@ export class TaskManager {
         return tasks;
       });
 
-      return convertArrayPrismaTaskToTaskResponse(tasks);
+      return convertArrayTaskRowToResponse(tasks);
     } catch (error) {
       this.logger.error(`Failed adding tasks to stage with error: ${(error as Error).message}`);
 
@@ -121,23 +116,17 @@ export class TaskManager {
    */
   @withSpanAsyncV4
   public async getTasks(params: TasksFindCriteriaArg): Promise<TasksPaginatedResponse> {
-    const { page, page_size, ...filterParams } = params ?? {};
-    const hasNoFilters = Object.keys(filterParams).length === 0;
+    const { total, items: tasks } = await this.taskRepository.findTasks({
+      stageId: params?.stage_id,
+      stageType: params?.stage_type,
+      status: params?.status,
+      fromDate: params?.from_date !== undefined ? new Date(params.from_date) : undefined,
+      endDate: params?.end_date !== undefined ? new Date(params.end_date) : undefined,
+      page: params?.page,
+      pageSize: params?.page_size,
+    });
 
-    const where: Prisma.TaskWhereInput | undefined = hasNoFilters
-      ? undefined
-      : {
-          AND: {
-            stageId: { equals: filterParams.stage_id },
-            stage: { type: { equals: filterParams.stage_type } },
-            status: { equals: filterParams.status },
-            creationTime: { gte: filterParams.from_date, lte: filterParams.end_date },
-          },
-        };
-
-    const { total, items: tasks } = await paginate(this.prisma.task, { where, orderBy: { creationTime: 'asc' as const } }, page, page_size);
-
-    return { total, items: convertArrayPrismaTaskToTaskResponse(tasks) };
+    return { total, items: convertArrayTaskRowToResponse(tasks) };
   }
 
   @withSpanAsyncV4
@@ -153,7 +142,7 @@ export class TaskManager {
       throw new TaskNotFoundError(tasksErrorMessages.taskNotFound);
     }
 
-    return convertPrismaToTaskResponse(task);
+    return convertTaskRowToResponse(task);
   }
 
   @withSpanAsyncV4
@@ -165,14 +154,9 @@ export class TaskManager {
     // To validate existence of stage, if not will throw StageNotFoundError
     await this.stageManager.getStageById(stageId);
 
-    const { total, items: tasks } = await paginate(
-      this.prisma.task,
-      { where: { stageId }, orderBy: { creationTime: 'asc' as const } },
-      query?.page,
-      query?.page_size
-    );
+    const { total, items: tasks } = await this.taskRepository.findTasks({ stageId, page: query?.page, pageSize: query?.page_size });
 
-    const items = tasks.map((task) => convertPrismaToTaskResponse(task));
+    const items = convertArrayTaskRowToResponse(tasks);
     return { total, items };
   }
 
@@ -182,27 +166,16 @@ export class TaskManager {
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
     });
-    const updateQueryBody = {
-      where: {
-        id: taskId,
-      },
-      data: {
-        userMetadata,
-      },
-    };
 
-    try {
-      await this.prisma.task.update(updateQueryBody);
-    } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === prismaKnownErrors.recordNotFound) {
-        throw new TaskNotFoundError(tasksErrorMessages.taskNotFound);
-      }
-      throw err;
+    const updatedTasks = await this.drizzle.update(taskTable).set({ userMetadata }).where(eq(taskTable.id, taskId)).returning({ id: taskTable.id });
+
+    if (updatedTasks.length === 0) {
+      throw new TaskNotFoundError(tasksErrorMessages.taskNotFound);
     }
   }
 
   @withSpanAsyncV4
-  public async updateStatus(taskId: TaskId, status: TaskOperationStatus, tx?: PrismaTransaction): Promise<TaskModel> {
+  public async updateStatus(taskId: TaskId, status: TaskOperationStatus, tx?: DrizzleTx): Promise<TaskModel> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
@@ -211,7 +184,7 @@ export class TaskManager {
 
     /* v8 ignore next 8 -- @preserve */
     if (!tx) {
-      return this.prisma.$transaction(async (newTx) => {
+      return this.drizzle.transaction(async (newTx) => {
         return this.executeUpdateStatus(taskId, status, newTx);
       });
     }
@@ -226,7 +199,7 @@ export class TaskManager {
    * @throws TaskNotFoundError when no suitable task is found
    */
   @withSpanAsyncV4
-  public async dequeue(stageType: string, tx?: PrismaTransaction): Promise<TaskModel> {
+  public async dequeue(stageType: string, tx?: DrizzleTx): Promise<TaskModel> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_DESTINATION_NAME]: stageType,
@@ -234,7 +207,7 @@ export class TaskManager {
 
     /* v8 ignore next 7 -- @preserve */
     if (tx === undefined) {
-      return this.prisma.$transaction(async (newTx) => {
+      return this.drizzle.transaction(async (newTx) => {
         return this.executeDequeue(stageType, newTx);
       });
     }
@@ -246,25 +219,15 @@ export class TaskManager {
   /**
    * This method is used to get a task entity by its id from the database.
    * @param taskId unique identifier of the task.
-   * @returns The task entity if found, otherwise null.
+   * @returns The task entity if found, otherwise undefined.
    */
   @withSpanAsyncV4
-  public async getTaskEntityById(taskId: TaskId, tx?: PrismaTransaction): Promise<TaskPrismaObject | null> {
+  public async getTaskEntityById(taskId: TaskId, tx?: DrizzleTx): Promise<Task | undefined> {
     trace.getActiveSpan()?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: taskId,
     });
 
-    const prisma = tx ?? this.prisma;
-    const queryBody = {
-      where: {
-        id: taskId,
-      },
-    };
-
-    // TODO: cast here, not at usage, because Prisma has no concept of branded scalars
-    // (see TaskPrismaObject in models.ts for why); revisit once that's fixed upstream.
-    const task = await prisma.task.findUnique(queryBody);
-    return task as TaskPrismaObject | null;
+    return (tx ?? this.drizzle).query.task.findFirst({ where: { id: { eq: taskId } } });
   }
 
   /**
@@ -283,21 +246,17 @@ export class TaskManager {
       const cutoffTime = subMinutes(new Date(), staleTaskThresholdInMinutes);
 
       // Find tasks that are stuck in IN_PROGRESS state beyond the time threshold
-      // TODO: cast here, not at usage, because Prisma has no concept of branded scalars
-      // (see TaskPrismaObject in models.ts for why); revisit once that's fixed upstream.
-      const staleTasks = (await this.prisma.task.findMany({
+      const staleTasks = await this.drizzle.query.task.findMany({
         where: {
-          status: TaskOperationStatus.IN_PROGRESS,
-          startTime: {
-            lt: cutoffTime,
-          },
+          status: { eq: TaskOperationStatus.IN_PROGRESS },
+          startTime: { lt: cutoffTime },
         },
-        select: {
+        columns: {
           id: true,
           stageId: true,
           startTime: true,
         },
-      })) as Pick<TaskPrismaObject, 'id' | 'stageId' | 'startTime'>[];
+      });
 
       if (staleTasks.length === 0) {
         this.logger.debug({ msg: 'No stale tasks found for cleanup' });
@@ -332,7 +291,7 @@ export class TaskManager {
    * @returns The dequeued task
    */
   @withSpanAsyncV4
-  private async executeDequeue(stageType: string, tx: PrismaTransaction): Promise<TaskModel> {
+  private async executeDequeue(stageType: string, tx: DrizzleTx): Promise<TaskModel> {
     const spanActive = trace.getActiveSpan();
 
     const task = await this.taskRepository.findAndLockTaskForDequeue(stageType, tx);
@@ -347,7 +306,7 @@ export class TaskManager {
     });
 
     const dequeuedTask = await this.executeUpdateAndValidateStatus(task, TaskOperationStatus.IN_PROGRESS, tx);
-    return convertPrismaToTaskResponse(dequeuedTask);
+    return convertTaskRowToResponse(dequeuedTask);
   }
 
   /**
@@ -358,7 +317,7 @@ export class TaskManager {
    * @returns The updated task model
    */
   @withSpanAsyncV4
-  private async executeUpdateStatus(taskId: TaskId, status: TaskOperationStatus, tx: PrismaTransaction): Promise<TaskModel> {
+  private async executeUpdateStatus(taskId: TaskId, status: TaskOperationStatus, tx: DrizzleTx): Promise<TaskModel> {
     const task = await this.getTaskEntityById(taskId, tx);
 
     if (!task) {
@@ -366,7 +325,7 @@ export class TaskManager {
     }
     const updatedTask = await this.updateAndValidateStatus(task, status, tx);
 
-    return convertPrismaToTaskResponse(updatedTask);
+    return convertTaskRowToResponse(updatedTask);
   }
 
   /**
@@ -377,7 +336,7 @@ export class TaskManager {
    * @returns The updated task object
    */
   @withSpanAsyncV4
-  private async updateAndValidateStatus(task: TaskPrismaObject, status: TaskOperationStatus, tx?: PrismaTransaction): Promise<TaskPrismaObject> {
+  private async updateAndValidateStatus(task: Task, status: TaskOperationStatus, tx?: DrizzleTx): Promise<Task> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_ID]: task.id,
@@ -388,7 +347,7 @@ export class TaskManager {
 
     /* v8 ignore next 7 -- @preserve */
     if (!tx) {
-      return this.prisma.$transaction(async (newTx) => {
+      return this.drizzle.transaction(async (newTx) => {
         return this.executeUpdateAndValidateStatus(task, status, newTx);
       });
     }
@@ -405,11 +364,7 @@ export class TaskManager {
    * @returns The updated task object
    */
   @withSpanAsyncV4
-  private async executeUpdateAndValidateStatus(
-    task: TaskPrismaObject,
-    status: TaskOperationStatus,
-    tx: PrismaTransaction
-  ): Promise<TaskPrismaObject> {
+  private async executeUpdateAndValidateStatus(task: Task, status: TaskOperationStatus, tx: DrizzleTx): Promise<Task> {
     const previousStatus = task.status;
     const { nextStatus, taskDataToUpdate } = this.determineNextStatus(task, status);
 
@@ -428,16 +383,14 @@ export class TaskManager {
 
     const endTime: Date | undefined = newPersistedSnapshot.status === 'done' ? new Date() : undefined;
 
-    // Create update query with race condition protection for IN_PROGRESS
-    const updateQueryBody = {
-      where: this.createUpdateWhereClause(task.id, previousStatus),
-      data: { ...taskDataToUpdate, status: nextStatus, xstate: newPersistedSnapshot, startTime, endTime },
-    };
-
-    // TODO: cast here, not at usage below, because Prisma has no concept of branded scalars
-    // (see TaskPrismaObject in models.ts for why); revisit once that's fixed upstream.
-    const updatedTasks = (await tx.task.updateManyAndReturn(updateQueryBody)) as TaskPrismaObject[];
-    if (updatedTasks[0] === undefined) {
+    // Update with race condition protection: only applies if the status is still the one read
+    const updatedTask = await this.taskRepository.updateTaskIfStatusUnchanged(
+      task.id,
+      previousStatus,
+      { ...taskDataToUpdate, status: nextStatus, xstate: newPersistedSnapshot, startTime, endTime },
+      tx
+    );
+    if (updatedTask === undefined) {
       // Race condition detected: another process already modified this task
       this.logger.warn({
         msg: 'Task status update failed - race condition detected',
@@ -465,7 +418,7 @@ export class TaskManager {
       }
 
       if (stage.status === StageOperationStatus.FAILED) {
-        return updatedTasks[0];
+        return updatedTask;
       }
 
       this.logger.info({
@@ -478,7 +431,7 @@ export class TaskManager {
       trace.getActiveSpan()?.addEvent('Stage set to FAILED', { stageId: task.stageId });
     }
 
-    return updatedTasks[0];
+    return updatedTask;
   }
 
   /**
@@ -488,11 +441,11 @@ export class TaskManager {
    * @returns Object containing the actual next status and any data updates needed
    */
   private determineNextStatus(
-    task: TaskPrismaObject,
+    task: Task,
     requestedStatus: TaskOperationStatus
   ): {
     nextStatus: TaskOperationStatus;
-    taskDataToUpdate?: Record<string, unknown>;
+    taskDataToUpdate?: Pick<NewTask, 'attempts'>;
   } {
     // Only special handling needed for FAILED status
     if (requestedStatus !== TaskOperationStatus.FAILED) {
@@ -507,26 +460,11 @@ export class TaskManager {
     return { nextStatus, taskDataToUpdate };
   }
 
-  /**
-   * Generates the query filter for task updates using optimistic locking.
-   * * By including `previousStatus` in the WHERE clause, we ensure that state
-   * transitions (e.g., PENDING → IN_PROGRESS) only occur if no other worker
-   * has modified the task in the interim.
-   *
-   * @param taskId - The ID of the task to update.
-   * @param nextStatus - The target status.
-   * @param previousStatus - The expected current status to prevent race conditions.
-   * @returns The filter object for the update query.
-   */
-  private createUpdateWhereClause(taskId: TaskId, previousStatus: TaskOperationStatus): { id: string; status: TaskOperationStatus } {
-    return { id: taskId, status: previousStatus };
-  }
-
   private async updateStageSummary(
     stageId: StageId,
     previousStatus: TaskOperationStatus,
     nextStatus: TaskOperationStatus,
-    tx: PrismaTransaction
+    tx: DrizzleTx
   ): Promise<void> {
     const updateSummaryPayload: UpdateSummaryCount = {
       add: { status: nextStatus, count: 1 },
@@ -541,7 +479,7 @@ export class TaskManager {
    * @param staleTasks - Array of stale task objects
    * @returns Object containing success and failure counts
    */
-  private async updateStaleTasksStatus(staleTasks: Pick<TaskPrismaObject, 'id' | 'stageId' | 'startTime'>[]): Promise<{
+  private async updateStaleTasksStatus(staleTasks: Pick<Task, 'id' | 'stageId' | 'startTime'>[]): Promise<{
     successCount: number;
     failureCount: number;
   }> {

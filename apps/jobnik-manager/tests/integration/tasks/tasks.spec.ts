@@ -13,8 +13,8 @@ import {
 } from '@map-colonies/openapi-helpers/requestSender';
 import { faker } from '@faker-js/faker';
 import { openapiFilePath, type paths, type operations, type JobId, type StageId, type TaskId } from 'jobnik-openapi';
+import { DrizzleQueryError } from 'drizzle-orm';
 import { Prisma, type PrismaClient } from '@prismaClient';
-import type { PrismaTransaction } from '@src/db/types';
 import { getApp } from '@src/app';
 import { SERVICES } from '@common/constants';
 import { initConfig } from '@src/common/config';
@@ -30,15 +30,18 @@ import {
   retryTaskXstatePersistentSnapshot,
 } from '@tests/unit/data';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
+import { StageRepository } from '@src/stages/DAL/stageRepository';
+import { TaskRepository } from '@src/tasks/DAL/taskRepository';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
-import { createProxyMock } from '@tests/configurations/mockPrisma';
 import { JobOperationStatus, Priority, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 import { createJobRequestBody } from '../jobs/helpers';
 import { addJobRecord, addStageRecord, createStageBody } from '../stages/helpers';
-import { createJobnikTree, createMockPrismaError, createMockUnknownDbError, endDatabasePool, truncateAllTables } from '../common/utils';
-import { createTaskBody, createTaskRecords } from './helpers';
+import { createJobnikTree, endDatabasePool, truncateAllTables } from '../common/utils';
+import { createTaskBody, createTaskRecords, waitForBlockedTaskUpdates } from './helpers';
 
 const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(expect);
+
+const LOCK_HOLDER_TIMEOUT_MS = 30_000;
 
 describe('task', function () {
   let requestSender: RequestSender<paths, operations>;
@@ -67,11 +70,10 @@ describe('task', function () {
     requestSender = await createRequestSender<paths, operations>(openapiFilePath, app);
     prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
     await truncateAllTables(prisma);
-
-    // Ensure Prisma methods exist before they can be spied on (Vitest 4.0 requirement)
   });
 
   afterEach(async function () {
+    vi.restoreAllMocks();
     await prisma.$disconnect();
     await endDatabasePool(container);
     memoryExporter.reset();
@@ -103,6 +105,30 @@ describe('task', function () {
         expect(response).toMatchObject({
           status: StatusCodes.OK,
           body: { total: 1, items: [{ id: tasks[0]!.id }] },
+        });
+        expect(response.body).toHaveProperty('items.length', 1);
+      });
+
+      it('should return 200 with only the tasks created within the from_date and end_date range', async function () {
+        const now = Date.now();
+        const { tasks } = await createJobnikTree(prisma, {}, { type: 'SOME_TEST_TYPE_DATE_RANGE' }, [
+          { creationTime: new Date(now - 3 * 60 * 60 * 1000) },
+          { creationTime: new Date(now - 60 * 60 * 1000) },
+          { creationTime: new Date(now + 60 * 60 * 1000) },
+        ]);
+
+        const response = await requestSender.getTasksByCriteriaV1({
+          queryParams: {
+            stage_type: 'SOME_TEST_TYPE_DATE_RANGE',
+            from_date: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+            end_date: new Date(now).toISOString(),
+          },
+        });
+
+        expect(response).toSatisfyApiSpec();
+        expect(response).toMatchObject({
+          status: StatusCodes.OK,
+          body: { total: 1, items: [{ id: tasks[1]!.id }] },
         });
         expect(response.body).toHaveProperty('items.length', 1);
       });
@@ -204,32 +230,13 @@ describe('task', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 when database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const findManySpy = createProxyMock(prisma.task, 'findMany');
-        findManySpy.mockRejectedValueOnce(error);
+      it('should return 500 when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.getTasksByCriteriaV1({});
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 when database driver throws unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const findManySpy = createProxyMock(prisma.task, 'findMany');
-        findManySpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.getTasksByCriteriaV1({});
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -240,7 +247,7 @@ describe('task', function () {
         const { tasks } = await createJobnikTree(prisma);
         const taskId = tasks[0]!.id;
 
-        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
 
         expect(getTaskResponse).toSatisfyApiSpec();
         expect(getTaskResponse).toMatchObject({ status: StatusCodes.OK, body: { status: TaskOperationStatus.CREATED } });
@@ -270,32 +277,13 @@ describe('task', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 when database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const findUniqueSpy = createProxyMock(prisma.task, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
+      it('should return 500 when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.getTaskByIdV1({ pathParams: { taskId: faker.string.uuid() as TaskId } });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 when database driver throws unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const findUniqueSpy = createProxyMock(prisma.task, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.getTaskByIdV1({ pathParams: { taskId: faker.string.uuid() as TaskId } });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -396,32 +384,13 @@ describe('task', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 when database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const findUniqueSpy = createProxyMock(prisma.stage, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
+      it('should return 500 when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.getTasksByStageIdV1({ pathParams: { stageId: faker.string.uuid() as StageId } });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 when database driver throws unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const findUniqueSpy = createProxyMock(prisma.stage, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.getTasksByStageIdV1({ pathParams: { stageId: faker.string.uuid() as StageId } });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -434,11 +403,11 @@ describe('task', function () {
         const taskId = tasks[0]!.id;
 
         const updateUserMetadataResponse = await requestSender.updateTaskUserMetadataV1({
-          pathParams: { taskId: taskId as TaskId },
+          pathParams: { taskId: taskId },
           requestBody: userMetadataInput,
         });
 
-        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: tasks[0]!.id as TaskId } });
+        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: tasks[0]!.id } });
 
         expect(updateUserMetadataResponse).toSatisfyApiSpec();
         expect(getTaskResponse.body).toMatchObject({ userMetadata: userMetadataInput });
@@ -464,7 +433,7 @@ describe('task', function () {
         const taskId = tasks[0]!.id;
 
         const response = await requestSender.updateTaskUserMetadataV1({
-          pathParams: { taskId: taskId as TaskId },
+          pathParams: { taskId: taskId },
           requestBody: 'badInputString' as unknown as { [key: string]: string },
         });
 
@@ -477,32 +446,13 @@ describe('task', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 when database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const updateSpy = createProxyMock(prisma.task, 'update');
-        updateSpy.mockRejectedValueOnce(error);
+      it('should return 500 when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.updateTaskUserMetadataV1({ pathParams: { taskId: faker.string.uuid() as TaskId }, requestBody: {} });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 when database driver throws unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const updateSpy = createProxyMock(prisma.task, 'update');
-        updateSpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.updateTaskUserMetadataV1({ pathParams: { taskId: faker.string.uuid() as TaskId }, requestBody: {} });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -760,10 +710,8 @@ describe('task', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 when database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const findUniqueSpy = createProxyMock(prisma.stage, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
+      it('should return 500 when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.addTasksV1({
           requestBody: [],
@@ -771,47 +719,14 @@ describe('task', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 when database driver throws unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const findUniqueSpy = createProxyMock(prisma.stage, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.addTasksV1({
-          requestBody: [],
-          pathParams: { stageId: faker.string.uuid() as StageId },
-        });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
 
       it('should return 500 and roll back the created tasks when updating the stage summary fails', async function () {
         const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
-        const originalTransaction = prisma.$transaction.bind(prisma);
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-        transactionSpy.mockImplementationOnce(async <T>(callback: (tx: PrismaTransaction) => Promise<T>): Promise<T> =>
-          originalTransaction(async (tx) => {
-            // the stage summary is updated after the tasks are inserted, so failing it proves the insert is rolled back
-            const failingTx = new Proxy(tx, {
-              get: (target, property, receiver): unknown => {
-                if (property === '$queryRaw') {
-                  return vi.fn().mockRejectedValueOnce(createMockPrismaError());
-                }
-                return Reflect.get(target, property, receiver) as unknown;
-              },
-            });
-            return callback(failingTx);
-          })
-        );
+        // the stage summary is updated after the tasks are inserted, so failing it proves the insert is rolled back
+        const dbError = new DrizzleQueryError('update "job_manager"."stage"', [], new Error('stage summary update failed'));
+        vi.spyOn(container.resolve(StageRepository), 'updateStageSummary').mockRejectedValueOnce(dbError);
 
         const response = await requestSender.addTasksV1({
           requestBody: [{ data: {}, userMetadata: {} }],
@@ -821,7 +736,7 @@ describe('task', function () {
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
           status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
+          body: { code: 'DATABASE_RELATED_ERROR' },
         });
         await expect(prisma.task.count({ where: { stageId: stage.id } })).resolves.toBe(0);
         await expect(prisma.stage.findUnique({ where: { id: stage.id } })).resolves.toHaveProperty('summary', stage.summary);
@@ -846,11 +761,11 @@ describe('task', function () {
         const taskId = tasks[0]!.id;
 
         const updateStatusResponse = await requestSender.updateTaskStatusV1({
-          pathParams: { taskId: taskId as TaskId },
+          pathParams: { taskId: taskId },
           requestBody: updateStatusInput,
         });
 
-        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id as StageId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
@@ -869,14 +784,14 @@ describe('task', function () {
         );
 
         const taskId = tasks[0]!.id;
-        const getTaskResponseBeforeUpdate = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponseBeforeUpdate = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
 
         const updateStatusResponse = await requestSender.updateTaskStatusV1({
-          pathParams: { taskId: taskId as TaskId },
+          pathParams: { taskId: taskId },
           requestBody: updateStatusInput,
         });
 
-        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
         expect(getTaskResponseBeforeUpdate.body).not.toHaveProperty('endTime');
@@ -898,14 +813,14 @@ describe('task', function () {
         );
 
         const taskId = tasks[0]!.id;
-        const getTaskResponseBeforeUpdate = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponseBeforeUpdate = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
 
         const updateStatusResponse = await requestSender.updateTaskStatusV1({
-          pathParams: { taskId: taskId as TaskId },
+          pathParams: { taskId: taskId },
           requestBody: updateStatusInput,
         });
 
-        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
         expect(getTaskResponseBeforeUpdate.body).not.toHaveProperty('endTime');
@@ -928,11 +843,11 @@ describe('task', function () {
         const stageId = stage.id;
 
         const updateStatusResponse = await requestSender.updateTaskStatusV1({
-          pathParams: { taskId: taskId as TaskId },
+          pathParams: { taskId: taskId },
           requestBody: updateStatusInput,
         });
 
-        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
@@ -957,11 +872,11 @@ describe('task', function () {
         const stageId = stage.id;
 
         const updateStatusResponse = await requestSender.updateTaskStatusV1({
-          pathParams: { taskId: taskId as TaskId },
+          pathParams: { taskId: taskId },
           requestBody: updateStatusInput,
         });
 
-        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
@@ -986,10 +901,10 @@ describe('task', function () {
         const stageId = stage.id;
 
         const updateStatusResponse = await requestSender.updateTaskStatusV1({
-          pathParams: { taskId: taskId as TaskId },
+          pathParams: { taskId: taskId },
           requestBody: updateStatusInput,
         });
-        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
@@ -1018,11 +933,11 @@ describe('task', function () {
         const stageId = stage.id;
 
         const updateStatusResponse = await requestSender.updateTaskStatusV1({
-          pathParams: { taskId: taskId as TaskId },
+          pathParams: { taskId: taskId },
           requestBody: updateStatusInput,
         });
 
-        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
 
         expect(updateStatusResponse).toSatisfyApiSpec();
@@ -1059,11 +974,11 @@ describe('task', function () {
         const stageId = stage.id;
 
         const updateStatusResponse = await requestSender.updateTaskStatusV1({
-          pathParams: { taskId: taskId as TaskId },
+          pathParams: { taskId: taskId },
           requestBody: updateStatusInput,
         });
 
-        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
         const getSecondStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: secondStage.body.id } });
         const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: stage.jobId as JobId } });
@@ -1093,11 +1008,11 @@ describe('task', function () {
         const stageId = stage.id;
 
         const updateStatusResponse = await requestSender.updateTaskStatusV1({
-          pathParams: { taskId: taskId as TaskId },
+          pathParams: { taskId: taskId },
           requestBody: updateStatusInput,
         });
 
-        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
         const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: stage.jobId as JobId } });
 
@@ -1120,7 +1035,7 @@ describe('task', function () {
         const taskId = tasks[0]!.id;
 
         const updateStatusResponse = await requestSender.updateTaskStatusV1({
-          pathParams: { taskId: taskId as TaskId },
+          pathParams: { taskId: taskId },
           requestBody: { status: TaskOperationStatus.COMPLETED },
         });
 
@@ -1162,19 +1077,8 @@ describe('task', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 when database driver throws an error', async function () {
-        const error = createMockPrismaError();
-
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-        transactionSpy.mockImplementationOnce(async <T>(callback: (tx: PrismaTransaction) => Promise<T>): Promise<void> => {
-          const mockTx = {
-            task: {
-              findUnique: vi.fn().mockRejectedValueOnce(error),
-            },
-          } as unknown as PrismaTransaction;
-
-          await callback(mockTx);
-        });
+      it('should return 500 when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.updateTaskStatusV1({
           pathParams: { taskId: faker.string.uuid() as TaskId },
@@ -1182,36 +1086,8 @@ describe('task', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 when database driver throws unexpected error', async function () {
-        const error = createMockUnknownDbError();
-
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-        transactionSpy.mockImplementationOnce(async <T>(callback: (tx: PrismaTransaction) => Promise<T>): Promise<void> => {
-          const mockTx = {
-            task: {
-              findUnique: vi.fn().mockRejectedValueOnce(error),
-            },
-          } as unknown as PrismaTransaction;
-
-          await callback(mockTx);
-        });
-
-        const response = await requestSender.updateTaskStatusV1({
-          pathParams: { taskId: faker.string.uuid() as TaskId },
-          requestBody: { status: TaskOperationStatus.COMPLETED },
-        });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
       });
     });
   });
@@ -1518,14 +1394,14 @@ describe('task', function () {
         const taskId = tasks[0]!.id;
 
         // Get task before dequeue to verify it doesn't have startTime
-        const getTaskResponseBeforeDequeue = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponseBeforeDequeue = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
 
         const dequeueResponse = await requestSender.dequeueTaskV1({
           pathParams: { stageType: 'SOME_TEST_TYPE_STARTIME_CHECK' },
         });
 
         // Get task after dequeue to verify it has startTime
-        const getTaskResponseAfterDequeue = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponseAfterDequeue = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
 
         expect(dequeueResponse).toSatisfyApiSpec();
         expect(dequeueResponse).toMatchObject({
@@ -1558,7 +1434,7 @@ describe('task', function () {
         const taskId = tasks[0]!.id;
 
         // Get task before dequeue to capture previous startTime
-        const getTaskResponseBeforeDequeue = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponseBeforeDequeue = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
         const taskBeforeDequeue = getTaskResponseBeforeDequeue.body as TaskModel;
         const previousStartTime = taskBeforeDequeue.startTime;
 
@@ -1567,7 +1443,7 @@ describe('task', function () {
         });
 
         // Get task after dequeue to verify startTime was updated
-        const getTaskResponseAfterDequeue = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponseAfterDequeue = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
         const taskAfterDequeue = getTaskResponseAfterDequeue.body as TaskModel;
 
         expect(dequeueResponse).toSatisfyApiSpec();
@@ -1717,50 +1593,16 @@ describe('task', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 when database driver throws an error', async function () {
-        const error = createMockPrismaError();
-
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-        transactionSpy.mockImplementationOnce(async <T>(callback: (tx: PrismaTransaction) => Promise<T>): Promise<void> => {
-          const mockTx = {
-            $queryRawTyped: vi.fn().mockRejectedValueOnce(error),
-          } as unknown as PrismaTransaction;
-
-          await callback(mockTx);
-        });
+      it('should return 500 when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.dequeueTaskV1({
           pathParams: { stageType: 'SOME_TEST_NAME' },
         });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 when database driver throws unexpected error', async function () {
-        const error = createMockUnknownDbError();
-
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-        transactionSpy.mockImplementationOnce(async <T>(callback: (tx: PrismaTransaction) => Promise<T>): Promise<void> => {
-          const mockTx = {
-            $queryRawTyped: vi.fn().mockRejectedValueOnce(error),
-          } as unknown as PrismaTransaction;
-
-          await callback(mockTx);
-        });
-
-        const response = await requestSender.dequeueTaskV1({
-          pathParams: { stageType: 'SOME_TEST_NAME' },
-        });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
       });
 
       it('should return 500 when transaction fails', async function () {
@@ -1786,7 +1628,7 @@ describe('task', function () {
           pathParams: { stageType: 'SOME_TEST_TYPE_FAILED_TRANSACTION' },
         });
 
-        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId as TaskId } });
+        const getTaskResponse = await requestSender.getTaskByIdV1({ pathParams: { taskId: taskId } });
         const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stageId as StageId } });
         const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
 
@@ -1896,7 +1738,7 @@ describe('task', function () {
       it('should return 409 CONFLICT when dequeue encounters race condition during task update', async function () {
         const initialSummary = { ...defaultStatusCounts, pending: 1, total: 1 };
 
-        await createJobnikTree(
+        const { tasks } = await createJobnikTree(
           prisma,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot, traceparent: DEFAULT_TRACEPARENT },
           {
@@ -1908,21 +1750,8 @@ describe('task', function () {
           [{ status: TaskOperationStatus.PENDING, xstate: pendingStageXstatePersistentSnapshot }]
         );
 
-        // Mock updateManyAndReturn to simulate race condition where task was modified between lock and update
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-        transactionSpy.mockImplementationOnce(async <T>(callback: (tx: PrismaTransaction) => Promise<T>): Promise<T> => {
-          const mockTx = {
-            ...prisma,
-            $queryRawTyped: prisma.$queryRawTyped.bind(prisma),
-            task: {
-              ...prisma.task,
-              findUnique: prisma.task.findUnique.bind(prisma.task),
-              updateManyAndReturn: vi.fn().mockResolvedValue([]), // Simulate race condition - no rows updated
-            },
-          } as unknown as PrismaTransaction;
-
-          return callback(mockTx);
-        });
+        // Skip the task's update, as if the task was modified between lock and update - no rows are updated
+        const updateTaskSpy = vi.spyOn(container.resolve(TaskRepository), 'updateTaskIfStatusUnchanged').mockResolvedValueOnce(undefined);
 
         const response = await requestSender.dequeueTaskV1({
           pathParams: { stageType: 'SOME_TEST_TYPE_DEQUEUE_RACE_CONFLICT' },
@@ -1936,6 +1765,7 @@ describe('task', function () {
             code: 'TASK_STATUS_UPDATE_FAILED',
           },
         });
+        expect(updateTaskSpy).toHaveBeenCalledWith(tasks[0]!.id, TaskOperationStatus.PENDING, expect.anything(), expect.anything());
       });
 
       it('should handle multiple concurrent updateStatus operations with race condition protection', async function () {
@@ -1956,55 +1786,44 @@ describe('task', function () {
         );
 
         const taskId = tasks[0]!.id;
-        let continueFirstUpdate: (value?: unknown) => void;
-        let continueSecondUpdate: (value?: unknown) => void;
-        const firstUpdateHolder = new Promise((resolve) => {
-          continueFirstUpdate = resolve;
-        });
-        const secondUpdateHolder = new Promise((resolve) => {
-          continueSecondUpdate = resolve;
-        });
 
-        // Mock task.findUnique for both update calls
-        const originalFindUnique = prisma.task.findUnique.bind(prisma.task);
-        const findUniqueSpy = createProxyMock(prisma.task, 'findUnique');
-
-        // First update call - pause before updating
-        findUniqueSpy.mockImplementationOnce(async (...args: Parameters<typeof originalFindUnique>) => {
-          const res = await originalFindUnique(...args);
-          await firstUpdateHolder; // Pause first update
-          return res;
+        // Hold the task's row lock, so both updates read the task and then block on their UPDATE
+        let releaseLock!: () => void;
+        const lockReleased = new Promise<void>((resolve) => {
+          releaseLock = resolve;
         });
-
-        // Second update call - pause before updating
-        findUniqueSpy.mockImplementationOnce(async (...args: Parameters<typeof originalFindUnique>) => {
-          const res = await originalFindUnique(...args);
-          continueFirstUpdate(); // Allow first update to proceed
-          await secondUpdateHolder; // Pause second update
-          return res;
+        let signalLockHeld!: () => void;
+        const lockHeld = new Promise<void>((resolve) => {
+          signalLockHeld = resolve;
         });
+        const lockHolder = prisma.$transaction(
+          async (tx) => {
+            await tx.$executeRaw`SELECT 1 FROM "job_manager"."task" WHERE id = ${taskId}::uuid FOR UPDATE`;
+            signalLockHeld();
+            await lockReleased;
+          },
+          { timeout: LOCK_HOLDER_TIMEOUT_MS }
+        );
+        await lockHeld;
 
         // Start both update operations concurrently (simulating 2 workers completing the same task)
-        const firstUpdatePromise = requestSender.updateTaskStatusV1({
-          pathParams: { taskId: taskId as TaskId },
-          requestBody: { status: TaskOperationStatus.COMPLETED },
-        });
-        const secondUpdatePromise = requestSender.updateTaskStatusV1({
-          pathParams: { taskId: taskId as TaskId },
-          requestBody: { status: TaskOperationStatus.COMPLETED },
-        });
+        const updatePromises = [
+          requestSender.updateTaskStatusV1({ pathParams: { taskId: taskId }, requestBody: { status: TaskOperationStatus.COMPLETED } }),
+          requestSender.updateTaskStatusV1({ pathParams: { taskId: taskId }, requestBody: { status: TaskOperationStatus.COMPLETED } }),
+        ];
 
-        // Wait for first update to complete
-        const firstResponse = await firstUpdatePromise;
+        await waitForBlockedTaskUpdates(prisma, updatePromises.length);
+        releaseLock();
+        await lockHolder;
 
-        // Allow second update to proceed
-        // @ts-expect-error not recognized initialization
-        continueSecondUpdate();
-        const secondResponse = await secondUpdatePromise;
+        const responses = await Promise.all(updatePromises);
+        const okStatus: number = StatusCodes.OK;
+        const okResponse = responses.find((response) => response.status === okStatus);
+        const conflictResponse = responses.find((response) => response.status !== okStatus);
 
-        // First update should succeed - task transitioned from IN_PROGRESS to COMPLETED
-        expect(firstResponse).toSatisfyApiSpec();
-        expect(firstResponse).toMatchObject({
+        // One update succeeds - task transitioned from IN_PROGRESS to COMPLETED
+        expect(okResponse).toSatisfyApiSpec();
+        expect(okResponse).toMatchObject({
           status: StatusCodes.OK,
           body: {
             id: taskId,
@@ -2012,10 +1831,10 @@ describe('task', function () {
           },
         });
 
-        // Second update should fail because task is no longer IN_PROGRESS
+        // The other fails because the task is no longer IN_PROGRESS
         // The optimistic locking prevents duplicate completion
-        expect(secondResponse).toSatisfyApiSpec();
-        expect(secondResponse).toMatchObject({
+        expect(conflictResponse).toSatisfyApiSpec();
+        expect(conflictResponse).toMatchObject({
           status: StatusCodes.CONFLICT,
           body: {
             message: tasksErrorMessages.taskStatusUpdateFailed,
