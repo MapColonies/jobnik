@@ -4,6 +4,7 @@ import { jsLogger } from '@map-colonies/js-logger';
 import { trace } from '@opentelemetry/api';
 import { addMinutes, subMinutes } from 'date-fns';
 import type { StageId } from 'jobnik-openapi';
+import { DrizzleQueryError } from 'drizzle-orm';
 import { type PrismaClient } from '@prismaClient';
 import { getApp } from '@src/app';
 import { SERVICES } from '@common/constants';
@@ -11,8 +12,8 @@ import { getConfig, initConfig } from '@src/common/config';
 import { inProgressStageXstatePersistentSnapshot } from '@tests/unit/data';
 import { defaultStatusCounts } from '@src/stages/models/helper';
 import { TaskManager } from '@src/tasks/models/manager';
+import { TaskRepository } from '@src/tasks/DAL/taskRepository';
 import { TaskOperationStatus, StageOperationStatus, JobOperationStatus } from '@src/db/persistenceModel';
-import { createTriggerOnUpdate, dropTriggerOnUpdate } from '../tasks/helpers';
 import { createJobnikTree, endDatabasePool, truncateAllTables } from '../common/utils';
 
 describe('TaskSweeper', () => {
@@ -40,6 +41,7 @@ describe('TaskSweeper', () => {
 
   afterEach(async function () {
     await prisma.$disconnect();
+    vi.restoreAllMocks();
     await endDatabasePool(container);
     vi.resetModules();
   });
@@ -67,6 +69,18 @@ describe('TaskSweeper', () => {
     const getTaskStatuses = async (stageId: StageId): Promise<TaskOperationStatus[]> => {
       const tasks = await prisma.task.findMany({ where: { stageId }, select: { status: true } });
       return tasks.map((task) => task.status).sort();
+    };
+
+    // Makes the status update of the given tasks fail, letting the others through
+    const failTaskUpdates = (taskIds: string[]): void => {
+      const taskRepository = container.resolve(TaskRepository);
+      const updateTask = taskRepository.updateTaskIfStatusUnchanged.bind(taskRepository);
+      vi.spyOn(taskRepository, 'updateTaskIfStatusUnchanged').mockImplementation(async (taskId, ...rest) => {
+        if (taskIds.includes(taskId)) {
+          throw new DrizzleQueryError('update "job_manager"."task"', [], new Error('task update failed'));
+        }
+        return updateTask(taskId, ...rest);
+      });
     };
 
     describe('Happy Path', function () {
@@ -302,31 +316,18 @@ describe('TaskSweeper', () => {
 
       it('should keep cleaning the remaining stale tasks when updating one of them fails', async function () {
         const { stage, tasks } = await createStageWithStaleTasks(2);
-        await createTriggerOnUpdate(prisma, 'task', [tasks[0]!.id], 'fail');
+        failTaskUpdates([tasks[0]!.id]);
 
-        try {
-          await expect(taskManager.cleanStaleTasks()).toResolve();
-        } finally {
-          await dropTriggerOnUpdate(prisma, 'task');
-        }
+        await expect(taskManager.cleanStaleTasks()).toResolve();
 
         await expect(getTaskStatuses(stage.id as StageId)).resolves.toEqual([TaskOperationStatus.FAILED, TaskOperationStatus.IN_PROGRESS].sort());
       });
 
       it('should resolve and leave the tasks untouched when every update fails', async function () {
         const { stage, tasks } = await createStageWithStaleTasks(2);
-        await createTriggerOnUpdate(
-          prisma,
-          'task',
-          tasks.map((task) => task.id),
-          'fail'
-        );
+        failTaskUpdates(tasks.map((task) => task.id));
 
-        try {
-          await expect(taskManager.cleanStaleTasks()).toResolve();
-        } finally {
-          await dropTriggerOnUpdate(prisma, 'task');
-        }
+        await expect(taskManager.cleanStaleTasks()).toResolve();
 
         await expect(getTaskStatuses(stage.id as StageId)).resolves.toEqual([TaskOperationStatus.IN_PROGRESS, TaskOperationStatus.IN_PROGRESS]);
       });

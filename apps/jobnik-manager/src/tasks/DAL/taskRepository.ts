@@ -1,12 +1,13 @@
 import { inject, Lifecycle, scoped } from 'tsyringe';
-import { and, asc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, inArray, relationsFilterToSQL } from 'drizzle-orm';
+import type { TaskId } from 'jobnik-openapi';
 import { DEFAULT_PAGE_SIZE, paginationParamsToOffsetAndLimit } from '@map-colonies/drizzle-utils';
 import { SERVICES } from '@src/common/constants';
-import type { Drizzle, DrizzleTx } from '@src/db/drizzle';
-import { jobTable, stageTable, taskTable } from '@src/db/entities';
-import { JobOperationStatus, StageOperationStatus, TaskOperationStatus, type Task } from '@src/db/persistenceModel';
+import type { Drizzle, DrizzleTx, TaskFilter } from '@src/db/drizzle';
+import { jobTable, relations, stageTable, taskTable } from '@src/db/entities';
+import { JobOperationStatus, StageOperationStatus, TaskOperationStatus, type NewTask, type Task } from '@src/db/persistenceModel';
 import type { PaginatedResult } from '@src/common/utils/pagination';
-import type { TasksFindCriteriaArg } from '../models/models';
+import type { TaskSearchParams } from '../models/models';
 
 const DEFAULT_PAGE = 1;
 
@@ -20,45 +21,58 @@ export class TaskRepository {
 
   /**
    * Finds a page of tasks matching the optional filters, ordered by creation time.
-   * @param criteria - the task search query params; filters that are not set are ignored
+   * @param params - the search criteria; filters that are not set are ignored
    * @returns the page of tasks and the total number of matching tasks
    */
-  public async findTasks(criteria: TasksFindCriteriaArg): Promise<PaginatedResult<Task[]>> {
-    const {
-      page = DEFAULT_PAGE,
-      page_size: pageSize = DEFAULT_PAGE_SIZE,
-      stage_id: stageId,
-      stage_type: stageType,
-      status,
-      from_date: fromDate,
-      end_date: endDate,
-    } = criteria ?? {};
+  public async findTasks(params: TaskSearchParams): Promise<PaginatedResult<Task[]>> {
+    const { page = DEFAULT_PAGE, pageSize = DEFAULT_PAGE_SIZE, stageId, stageType, status, fromDate, endDate } = params;
 
-    // A function of the table, because the relational query aliases it.
-    const filter = (table: typeof taskTable): SQL =>
-      and(
-        stageId !== undefined ? eq(table.stageId, stageId) : undefined,
-        stageType !== undefined
-          ? inArray(table.stageId, this.drizzle.select({ id: stageTable.id }).from(stageTable).where(eq(stageTable.type, stageType)))
-          : undefined,
-        status !== undefined ? eq(table.status, status) : undefined,
-        fromDate !== undefined ? gte(table.creationTime, new Date(fromDate)) : undefined,
-        endDate !== undefined ? lte(table.creationTime, new Date(endDate)) : undefined
-      ) ?? sql`true`;
+    // Relational filters skip undefined values, so unset criteria don't filter.
+    // The branded stage id goes through `eq`, as the filter can't tell it apart from an operator object.
+    const where = {
+      stageId: { eq: stageId },
+      stage: stageType !== undefined ? { type: stageType } : undefined,
+      status,
+      creationTime: { gte: fromDate, lte: endDate },
+    } satisfies TaskFilter;
 
     const { limit, offset } = paginationParamsToOffsetAndLimit({ page, pageSize });
 
     const itemsQuery = this.drizzle.query.task.findMany({
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      where: { RAW: filter },
+      where,
       orderBy: { creationTime: 'asc' },
       limit,
       offset,
     });
 
-    const [items, total] = await Promise.all([itemsQuery, this.drizzle.$count(taskTable, filter(taskTable))]);
+    // The stage filter is a relation, so the count needs the relations config to build it.
+    const countFilter = relationsFilterToSQL(taskTable, where, relations.task.relations, relations);
+    const [items, total] = await Promise.all([itemsQuery, this.drizzle.$count(taskTable, countFilter)]);
 
     return { total, items };
+  }
+
+  /**
+   * Updates a task only if its status is still the expected one, guarding against concurrent status changes.
+   * @param taskId - unique identifier of the task
+   * @param previousStatus - the status the task is expected to have
+   * @param values - the columns to update
+   * @param tx - the transaction to run the update in
+   * @returns the updated task, or undefined if the task's status was changed by someone else
+   */
+  public async updateTaskIfStatusUnchanged(
+    taskId: TaskId,
+    previousStatus: TaskOperationStatus,
+    values: Partial<NewTask>,
+    tx: DrizzleTx
+  ): Promise<Task | undefined> {
+    const [task] = await tx
+      .update(taskTable)
+      .set(values)
+      .where(and(eq(taskTable.id, taskId), eq(taskTable.status, previousStatus)))
+      .returning();
+
+    return task;
   }
 
   /**

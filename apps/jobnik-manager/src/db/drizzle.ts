@@ -18,6 +18,9 @@ export type JobFilter = RelationsFilter<(typeof relations)['job'], typeof relati
 /** A relational query filter on the stage table; keys whose value is undefined are ignored. */
 export type StageFilter = RelationsFilter<(typeof relations)['stage'], typeof relations>;
 
+/** A relational query filter on the task table; keys whose value is undefined are ignored. */
+export type TaskFilter = RelationsFilter<(typeof relations)['task'], typeof relations>;
+
 export function createDrizzle(pool: Pool): Drizzle {
   return drizzle({ client: pool, relations });
 }
