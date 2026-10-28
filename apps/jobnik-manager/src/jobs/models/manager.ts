@@ -32,7 +32,15 @@ export class JobManager {
 
   @withSpanAsyncV4
   public async getJobs(params: JobFindCriteriaArg): Promise<JobsPaginatedResponse> {
-    const { total, items: jobs } = await this.jobRepository.findJobs(params);
+    const { total, items: jobs } = await this.jobRepository.findJobs({
+      name: params?.job_name,
+      priority: params?.priority,
+      fromDate: params?.from_date !== undefined ? new Date(params.from_date) : undefined,
+      endDate: params?.end_date !== undefined ? new Date(params.end_date) : undefined,
+      includeStages: params?.should_return_stages,
+      page: params?.page,
+      pageSize: params?.page_size,
+    });
 
     const items = jobs.map((job) => this.convertJobRowToResponse(job));
     return { total, items };
@@ -180,14 +188,7 @@ export class JobManager {
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
     });
 
-    if (options.includeStages === true) {
-      return this.jobRepository.findJobWithStagesById(jobId, options.tx);
-    }
-
-    const drizzle = options.tx ?? this.drizzle;
-    const job = await drizzle.query.job.findFirst({ where: { id: { eq: jobId } } });
-
-    return job as JobRow<IncludeStages> | undefined;
+    return this.jobRepository.findJobById(jobId, options);
   }
 
   @withSpanAsyncV4

@@ -12,4 +12,19 @@ type JobsPaginatedResponse = components['schemas']['jobsPaginatedResponse'];
  */
 type JobRow<IncludeStages extends boolean = boolean> = Job & (IncludeStages extends true ? { stages: Stage[] } : { stages?: Stage[] });
 
-export type { JobModel, JobCreateModel, JobFindCriteriaArg, JobRow, JobsPaginatedResponse };
+/**
+ * Criteria for searching jobs; filters that are not set are ignored
+ */
+interface JobSearchParams {
+  name?: Job['name'];
+  priority?: Job['priority'];
+  /** Only jobs created at or after this time */
+  fromDate?: Date;
+  /** Only jobs created at or before this time */
+  endDate?: Date;
+  includeStages?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+export type { JobModel, JobCreateModel, JobFindCriteriaArg, JobRow, JobSearchParams, JobsPaginatedResponse };
