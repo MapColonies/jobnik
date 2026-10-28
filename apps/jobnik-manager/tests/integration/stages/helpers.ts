@@ -4,8 +4,8 @@ import { type Prisma, type PrismaClient } from '@prismaClient';
 import type { StagePrismaObject } from '@src/stages/models/models';
 import { stageStateMachine } from '@src/stages/models/stageStateMachine';
 import { defaultStatusCounts } from '@src/stages/models/helper';
-import type { JobPrismaObject } from '@src/jobs/models/models';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
+import type { PrismaJobWithStages } from '../jobs/helpers';
 
 const persistedSnapshot = createActor(stageStateMachine).start().getPersistedSnapshot();
 
@@ -15,7 +15,7 @@ const persistedSnapshot = createActor(stageStateMachine).start().getPersistedSna
  * @param prisma - prisma client
  * @returns job record with related stages
  */
-export const addJobRecord = async (body: Prisma.JobCreateInput, prisma: PrismaClient): Promise<JobPrismaObject> => {
+export const addJobRecord = async (body: Prisma.JobCreateInput, prisma: PrismaClient): Promise<PrismaJobWithStages> => {
   const res = await prisma.job.create({
     data: body,
     include: { stage: true },

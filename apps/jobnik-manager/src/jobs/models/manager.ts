@@ -7,48 +7,42 @@ import { withSpanAsyncV4 } from '@map-colonies/tracing-utils';
 import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
 import type { JobId } from 'jobnik-openapi';
 import { IllegalJobStatusTransitionError, JobNotInFiniteStateError, JobNotFoundError } from 'jobnik-openapi';
-import type { PrismaClient } from '@prismaClient';
-import { Prisma } from '@prismaClient';
+import { eq } from 'drizzle-orm';
 import { SERVICES } from '@common/constants';
 import { convertArrayPrismaStageToStageResponse } from '@src/stages/models/helper';
-import { illegalStatusTransitionErrorMessage, prismaKnownErrors } from '@common/errors';
-import { type PrismaTransaction } from '@src/db/types';
+import { illegalStatusTransitionErrorMessage } from '@common/errors';
+import type { Drizzle, DrizzleTx } from '@src/db/drizzle';
+import { jobTable } from '@src/db/entities';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
 import { ATTR_MESSAGING_MESSAGE_CONVERSATION_ID } from '@src/common/semconv';
-import { paginate } from '@src/common/utils/pagination';
-import { type Priority, JobOperationStatus } from '@src/db/persistenceModel';
+import { type NewJob, type Priority, JobOperationStatus } from '@src/db/persistenceModel';
+import { JobRepository } from '../DAL/jobRepository';
 import { errorMessages as jobsErrorMessages, SamePriorityChangeError } from './errors';
-import type { JobCreateModel, JobModel, JobFindCriteriaArg, JobPrismaObject, JobsPaginatedResponse } from './models';
+import type { JobCreateModel, JobModel, JobFindCriteriaArg, JobRow, JobsPaginatedResponse } from './models';
 import { jobStateMachine, OperationStatusMapper } from './jobStateMachine';
 
 @injectable()
 export class JobManager {
   public constructor(
     @inject(SERVICES.LOGGER) private readonly logger: Logger,
-    @inject(SERVICES.PRISMA) private readonly prisma: PrismaClient,
-    @inject(SERVICES.TRACER) public readonly tracer: Tracer
+    @inject(SERVICES.DRIZZLE) private readonly drizzle: Drizzle,
+    @inject(SERVICES.TRACER) public readonly tracer: Tracer,
+    @inject(JobRepository) private readonly jobRepository: JobRepository
   ) {}
 
   @withSpanAsyncV4
   public async getJobs(params: JobFindCriteriaArg): Promise<JobsPaginatedResponse> {
-    const { page, page_size, ...filterParams } = params ?? {};
+    const { total, items: jobs } = await this.jobRepository.findJobs({
+      name: params?.job_name,
+      priority: params?.priority,
+      fromDate: params?.from_date !== undefined ? new Date(params.from_date) : undefined,
+      endDate: params?.end_date !== undefined ? new Date(params.end_date) : undefined,
+      includeStages: params?.should_return_stages,
+      page: params?.page,
+      pageSize: params?.page_size,
+    });
 
-    const where = {
-      AND: {
-        name: { equals: filterParams.job_name },
-        priority: { equals: filterParams.priority },
-        creationTime: { gte: filterParams.from_date, lte: filterParams.end_date },
-      },
-    };
-
-    const { total, items: jobs } = await paginate(
-      this.prisma.job,
-      { where, include: { stage: filterParams.should_return_stages ?? false }, orderBy: { creationTime: 'asc' as const } },
-      page,
-      page_size
-    );
-
-    const items = jobs.map((job) => this.convertPrismaToJobResponse(job));
+    const items = jobs.map((job) => this.convertJobRowToResponse(job));
     return { total, items };
   }
 
@@ -73,9 +67,13 @@ export class JobManager {
         xstate: persistenceSnapshot,
         traceparent,
         tracestate,
-      } satisfies Prisma.JobCreateInput;
-      const createdJob = await this.prisma.job.create({ data: input, include: { stage: false } });
-      const res = this.convertPrismaToJobResponse(createdJob);
+      } satisfies NewJob;
+      const [createdJob] = await this.drizzle.insert(jobTable).values(input).returning();
+      /* v8 ignore next 3 -- @preserve */
+      if (!createdJob) {
+        throw new Error('Failed to create job: no row returned from database.');
+      }
+      const res = this.convertJobRowToResponse(createdJob);
 
       spanActive?.setAttributes({
         [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: res.id,
@@ -101,7 +99,7 @@ export class JobManager {
       throw new JobNotFoundError(jobsErrorMessages.jobNotFound);
     }
 
-    return this.convertPrismaToJobResponse(job);
+    return this.convertJobRowToResponse(job);
   }
 
   @withSpanAsyncV4
@@ -110,22 +108,10 @@ export class JobManager {
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
     });
 
-    const updateQueryBody = {
-      where: {
-        id: jobId,
-      },
-      data: {
-        userMetadata,
-      },
-    };
+    const updatedJobs = await this.drizzle.update(jobTable).set({ userMetadata }).where(eq(jobTable.id, jobId)).returning({ id: jobTable.id });
 
-    try {
-      await this.prisma.job.update(updateQueryBody);
-    } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === prismaKnownErrors.recordNotFound) {
-        throw new JobNotFoundError(jobsErrorMessages.jobNotFound);
-      }
-      throw err;
+    if (updatedJobs.length === 0) {
+      throw new JobNotFoundError(jobsErrorMessages.jobNotFound);
     }
   }
 
@@ -146,27 +132,18 @@ export class JobManager {
       throw new SamePriorityChangeError(jobsErrorMessages.priorityCannotBeUpdatedToSameValue);
     }
 
-    const updateQueryBody = {
-      where: {
-        id: jobId,
-      },
-      data: {
-        priority,
-      },
-    };
-
-    await this.prisma.job.update(updateQueryBody);
+    await this.drizzle.update(jobTable).set({ priority }).where(eq(jobTable.id, jobId));
   }
 
   @withSpanAsyncV4
-  public async updateStatus(jobId: JobId, status: JobOperationStatus, tx?: PrismaTransaction): Promise<void> {
+  public async updateStatus(jobId: JobId, status: JobOperationStatus, tx?: DrizzleTx): Promise<void> {
     trace.getActiveSpan()?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
       [INFRA_CONVENTIONS.infra.jobnik.job.status]: status,
     });
 
     if (!tx) {
-      return this.prisma.$transaction(async (newTx) => {
+      return this.drizzle.transaction(async (newTx) => {
         await this.executeUpdateStatus(jobId, status, newTx);
       });
     }
@@ -192,13 +169,7 @@ export class JobManager {
       throw new JobNotInFiniteStateError(jobsErrorMessages.jobNotInFiniteState);
     }
 
-    const deleteQueryBody = {
-      where: {
-        id: jobId,
-      },
-    };
-
-    await this.prisma.job.delete(deleteQueryBody);
+    await this.drizzle.delete(jobTable).where(eq(jobTable.id, jobId));
   }
 
   /**
@@ -210,28 +181,18 @@ export class JobManager {
   @withSpanAsyncV4
   public async getJobEntityById<IncludeStages extends boolean = false>(
     jobId: JobId,
-    options: { includeStages?: IncludeStages; tx?: PrismaTransaction } = {}
-  ): Promise<JobPrismaObject<IncludeStages> | null> {
+    options: { includeStages?: IncludeStages; tx?: DrizzleTx } = {}
+  ): Promise<JobRow<IncludeStages> | undefined> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
     });
 
-    const prisma = options.tx ?? this.prisma;
-    const queryBody = {
-      where: {
-        id: jobId,
-      },
-      include: { stage: options.includeStages },
-    };
-
-    const job = await prisma.job.findUnique(queryBody);
-
-    return job as JobPrismaObject<IncludeStages> | null;
+    return this.jobRepository.findJobById(jobId, options);
   }
 
   @withSpanAsyncV4
-  private async executeUpdateStatus(jobId: JobId, status: JobOperationStatus, tx: PrismaTransaction): Promise<void> {
+  private async executeUpdateStatus(jobId: JobId, status: JobOperationStatus, tx: DrizzleTx): Promise<void> {
     const job = await this.getJobEntityById(jobId, { tx });
 
     if (!job) {
@@ -249,38 +210,26 @@ export class JobManager {
     updateActor.send({ type: nextStatusChange });
     const newPersistedSnapshot = updateActor.getPersistedSnapshot();
 
-    const updateQueryBody = {
-      where: {
-        id: jobId,
-      },
-      data: {
-        status,
-        xstate: newPersistedSnapshot,
-      },
-    };
-
-    await tx.job.update(updateQueryBody);
+    await tx.update(jobTable).set({ status, xstate: newPersistedSnapshot }).where(eq(jobTable.id, jobId));
   }
 
   /**
-   * Converts a Prisma job object to a job response model
-   * @param prismaObjects - The Prisma job object with or without stages
+   * Converts a job row to a job response model
+   * @param jobRow - The job row, with or without stages
    * @returns The converted job model
    */
-  private convertPrismaToJobResponse(prismaObjects: JobPrismaObject<true>): JobModel;
-  private convertPrismaToJobResponse(prismaObjects: JobPrismaObject<false>): JobModel;
-  private convertPrismaToJobResponse(prismaObjects: JobPrismaObject): JobModel {
-    const { data, creationTime, userMetadata, updateTime, tracestate, xstate, stage, ...rest } = prismaObjects;
+  private convertJobRowToResponse(jobRow: JobRow): JobModel {
+    const { data, creationTime, userMetadata, updateTime, tracestate, xstate, stages, ...rest } = jobRow;
 
     const transformedFields = {
-      data: data as Record<string, never>,
+      data,
       creationTime: creationTime.toISOString(),
-      userMetadata: userMetadata as { [key: string]: unknown },
+      userMetadata,
       updateTime: updateTime.toISOString(),
       tracestate: tracestate ?? undefined,
-      stages: Array.isArray(stage) ? convertArrayPrismaStageToStageResponse(stage) : undefined,
+      stages: stages ? convertArrayPrismaStageToStageResponse(stages) : undefined,
     };
 
-    return Object.assign(rest, transformedFields) as unknown as JobModel;
+    return Object.assign(rest, transformedFields);
   }
 }

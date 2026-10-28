@@ -1,5 +1,5 @@
 import type { components, operations } from 'jobnik-openapi';
-import type { Prisma } from '@prismaClient';
+import type { Job, Stage } from '@src/db/persistenceModel';
 
 type JobModel = components['schemas']['job'];
 type JobCreateModel = components['schemas']['createJobPayload'];
@@ -7,11 +7,24 @@ type JobFindCriteriaArg = operations['findJobsV1']['parameters']['query'];
 type JobsPaginatedResponse = components['schemas']['jobsPaginatedResponse'];
 
 /**
- * Generic type for Job Prisma objects with configurable stage inclusion
- * @template IncludeStages - Whether to include stages in the result
+ * A job row of the Persistence model, with its stages when they were requested
+ * @template IncludeStages - Whether the stages were loaded with the job
  */
-type JobPrismaObject<IncludeStages extends boolean = boolean> = Prisma.JobGetPayload<{
-  include: { stage: IncludeStages };
-}>;
+type JobRow<IncludeStages extends boolean = boolean> = Job & (IncludeStages extends true ? { stages: Stage[] } : { stages?: Stage[] });
 
-export type { JobModel, JobCreateModel, JobFindCriteriaArg, JobPrismaObject, JobsPaginatedResponse };
+/**
+ * Criteria for searching jobs; filters that are not set are ignored
+ */
+interface JobSearchParams {
+  name?: Job['name'];
+  priority?: Job['priority'];
+  /** Only jobs created at or after this time */
+  fromDate?: Date;
+  /** Only jobs created at or before this time */
+  endDate?: Date;
+  includeStages?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+export type { JobModel, JobCreateModel, JobFindCriteriaArg, JobRow, JobSearchParams, JobsPaginatedResponse };
