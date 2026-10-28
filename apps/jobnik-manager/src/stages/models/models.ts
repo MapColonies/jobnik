@@ -24,6 +24,18 @@ interface StageEntityOptions {
 }
 
 /**
+ * Criteria for searching stages; filters that are not set are ignored
+ */
+interface StageSearchParams {
+  jobId?: Stage['jobId'];
+  type?: Stage['type'];
+  status?: Stage['status'];
+  includeTasks?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+/**
  * A stage row of the Persistence model, with its tasks and job when they were requested
  */
 type StageRow = Stage & { tasks?: Task[]; job?: Job };
@@ -51,5 +63,6 @@ export type {
   UpdateSummaryCount,
   StageIncludingJob,
   StageEntityOptions,
+  StageSearchParams,
   StagesPaginatedResponse,
 };
