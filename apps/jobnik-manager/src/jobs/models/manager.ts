@@ -9,7 +9,7 @@ import type { JobId } from 'jobnik-openapi';
 import { IllegalJobStatusTransitionError, JobNotInFiniteStateError, JobNotFoundError } from 'jobnik-openapi';
 import { eq } from 'drizzle-orm';
 import { SERVICES } from '@common/constants';
-import { convertArrayPrismaStageToStageResponse } from '@src/stages/models/helper';
+import { convertArrayStageRowToResponse } from '@src/stages/models/helper';
 import { illegalStatusTransitionErrorMessage } from '@common/errors';
 import type { Drizzle, DrizzleTx } from '@src/db/drizzle';
 import { jobTable } from '@src/db/entities';
@@ -227,7 +227,7 @@ export class JobManager {
       userMetadata,
       updateTime: updateTime.toISOString(),
       tracestate: tracestate ?? undefined,
-      stages: stages ? convertArrayPrismaStageToStageResponse(stages) : undefined,
+      stages: stages ? convertArrayStageRowToResponse(stages) : undefined,
     };
 
     return Object.assign(rest, transformedFields);

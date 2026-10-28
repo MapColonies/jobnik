@@ -2,10 +2,10 @@ import { faker } from '@faker-js/faker';
 import { type Snapshot } from 'xstate';
 import type { DependencyContainer } from 'tsyringe';
 import type { Pool } from 'pg';
-import type { Job as PrismaJob, Prisma, PrismaClient } from '@prismaClient';
+import type { Job as PrismaJob, Stage as PrismaStage, Prisma, PrismaClient } from '@prismaClient';
 import type { JobCreateModel } from '@src/jobs/models/models';
 import { SERVICES } from '@common/constants';
-import type { JobOperationStatus, Stage, Task } from '@src/db/persistenceModel';
+import type { JobOperationStatus, Task } from '@src/db/persistenceModel';
 import { createJobRecord, createJobRequestBody } from '../jobs/helpers';
 import { createStageBody, addStageRecord } from '../stages/helpers';
 import { createTaskBody, createTaskRecords } from '../tasks/helpers';
@@ -144,12 +144,12 @@ export function createMockUnknownDbError(): Error {
 
 // Type definitions using inheritance - cleaner hierarchy
 export interface JobOnlyTree {
-  // Still a Prisma row: the fixtures are written through Prisma until the integration setup moves to Drizzle.
+  // Still Prisma rows: the fixtures are written through Prisma until the integration setup moves to Drizzle.
   readonly job: PrismaJob;
 }
 
 export interface JobWithStageTree extends JobOnlyTree {
-  readonly stage: Stage;
+  readonly stage: PrismaStage;
 }
 
 export interface FullJobnikTree extends JobWithStageTree {
