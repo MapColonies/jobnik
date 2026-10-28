@@ -13,14 +13,11 @@ export type Drizzle = ReturnType<typeof drizzle<typeof relations>>;
  */
 export type DrizzleTx = Parameters<Parameters<Drizzle['transaction']>[0]>[0];
 
-/** A relational query filter on the job table; keys whose value is undefined are ignored. */
-export type JobFilter = RelationsFilter<(typeof relations)['job'], typeof relations>;
-
-/** A relational query filter on the stage table; keys whose value is undefined are ignored. */
-export type StageFilter = RelationsFilter<(typeof relations)['stage'], typeof relations>;
-
-/** A relational query filter on the task table; keys whose value is undefined are ignored. */
-export type TaskFilter = RelationsFilter<(typeof relations)['task'], typeof relations>;
+/**
+ * A relational query filter on one table; keys whose value is undefined are ignored.
+ * @template TTable - the table's name in the relations config
+ */
+export type TableFilter<TTable extends keyof typeof relations> = RelationsFilter<(typeof relations)[TTable], typeof relations>;
 
 /**
  * Thrown when a transaction fails before its callback runs, for example when no connection can be checked out of the pool.
