@@ -7,7 +7,7 @@ catalog:
   eslint: ^10.10.0
   '@map-colonies/eslint-config': ^9.0.0
   '@map-colonies/tsconfig': ^2.0.0
-  '@types/node': ^24.13.3
+  '@types/node': ^26.6.6
   vitest: ^4.1.11
   '@vitest/ui': ^4.1.11
   '@vitest/coverage-v8': ^4.1.11

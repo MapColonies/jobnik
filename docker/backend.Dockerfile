@@ -1,4 +1,4 @@
-ARG NODE_VERSION=24
+ARG NODE_VERSION=26
 
 # Base image for all stages
 FROM node:${NODE_VERSION}-slim AS base
@@ -7,7 +7,7 @@ WORKDIR /app
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME/bin:$PATH"
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable
+RUN npm install -g corepack && corepack enable
 
 
 FROM base AS pruner
