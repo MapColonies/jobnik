@@ -51,7 +51,9 @@ describe('database connection loss', () => {
     const client = await appPool.connect();
     const { rows } = await client.query<{ pid: number }>('SELECT pg_backend_pid() AS pid');
 
+    const ended = new Promise((resolve) => client.once('end', resolve));
     await adminPool.query('SELECT pg_terminate_backend($1)', [rows[0]!.pid]);
+    await ended;
 
     await expect(client.query('SELECT 1')).rejects.toThrow();
 
