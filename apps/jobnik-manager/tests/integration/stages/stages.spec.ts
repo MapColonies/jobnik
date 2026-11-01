@@ -1,8 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { describe, beforeEach, afterEach, it, expect, beforeAll } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
-import { jsLogger } from '@map-colonies/js-logger';
-import { trace } from '@opentelemetry/api';
 import { StatusCodes } from 'http-status-codes';
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
 import {
@@ -13,9 +11,9 @@ import {
 } from '@map-colonies/openapi-helpers/requestSender';
 import { faker } from '@faker-js/faker';
 import { openapiFilePath, type paths, type operations, type JobId, type StageId } from 'jobnik-openapi';
+import { eq } from 'drizzle-orm';
 import type { Drizzle } from '@src/db/drizzle';
-import { getApp } from '@src/app';
-import { SERVICES } from '@common/constants';
+import { jobTable, stageTable } from '@src/db/entities';
 import { initConfig } from '@src/common/config';
 import { errorMessages as jobsErrorMessages } from '@src/jobs/models/errors';
 import type { StageCreateModel, StageModel, StagesPaginatedResponse } from '@src/stages/models/models';
@@ -33,7 +31,7 @@ import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 import { JobOperationStatus, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 import { createJobRecord, createJobRequestBody, testJobId, testStageId } from '../jobs/helpers';
-import { createJobnikTree, endDatabasePool, truncateAllTables, waitForQueryBlockedOnLock } from '../common/utils';
+import { createJobnikTree, endDatabasePool, setupIntegrationApp, teardownIntegrationApp, waitForQueryBlockedOnLock } from '../common/utils';
 import { addStageRecord, createStageBody } from './helpers';
 
 const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(expect);
@@ -55,22 +53,13 @@ describe('stage', function () {
   });
 
   beforeEach(async function () {
-    let app;
-    [app, container] = await getApp({
-      override: [
-        { token: SERVICES.LOGGER, provider: { useValue: jsLogger({ enabled: false }) } },
-        { token: SERVICES.TRACER, provider: { useValue: trace.getTracer('testTracer') } },
-      ],
-      useChild: true,
-    });
-
-    requestSender = await createRequestSender<paths, operations>(openapiFilePath, app);
-    drizzle = container.resolve<Drizzle>(SERVICES.DRIZZLE);
-    await truncateAllTables(drizzle);
+    const integrationApp = await setupIntegrationApp();
+    ({ container, drizzle } = integrationApp);
+    requestSender = await createRequestSender<paths, operations>(openapiFilePath, integrationApp.app);
   });
 
   afterEach(async function () {
-    await endDatabasePool(container);
+    await teardownIntegrationApp(container);
     memoryExporter.reset();
   });
 
@@ -225,13 +214,13 @@ describe('stage', function () {
         let jobBExportPendingId: string;
 
         const createStageFor = async (jobId: string, type: string, status: StageOperationStatus, order: number): Promise<string> => {
-          const stage = await addStageRecord({ ...createStageBody, jobId, type, status, order }, prisma);
+          const stage = await addStageRecord({ ...createStageBody, jobId: jobId as JobId, type, status, order }, drizzle);
           return stage.id;
         };
 
         beforeEach(async function () {
-          jobAId = (await createJobRecord(createJobRequestBody, prisma)).id;
-          jobBId = (await createJobRecord(createJobRequestBody, prisma)).id;
+          jobAId = (await createJobRecord(createJobRequestBody, drizzle)).id;
+          jobBId = (await createJobRecord(createJobRequestBody, drizzle)).id;
           jobATilingPendingId = await createStageFor(jobAId, 'tiling', StageOperationStatus.PENDING, 1);
           jobAExportCreatedId = await createStageFor(jobAId, 'export', StageOperationStatus.CREATED, 2);
           jobBTilingCreatedId = await createStageFor(jobBId, 'tiling', StageOperationStatus.CREATED, 1);
@@ -685,7 +674,7 @@ describe('stage', function () {
       });
 
       it('should give the next order to a stage added while another stage is being added to the same job', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         let releaseJob!: () => void;
         const jobReleased = new Promise<void>((resolve) => {
@@ -697,9 +686,9 @@ describe('stage', function () {
         });
 
         // Adds the first stage the way addStage does, in a transaction that stays open, so the request has to wait for it.
-        const concurrentAddStage = prisma.$transaction(async (tx) => {
-          await tx.$executeRaw`SELECT 1 FROM job_manager.job WHERE id = ${job.id}::uuid FOR NO KEY UPDATE`;
-          await tx.stage.create({ data: { ...createStageBody, jobId: job.id, order: 1 } });
+        const concurrentAddStage = drizzle.transaction(async (tx) => {
+          await tx.select().from(jobTable).where(eq(jobTable.id, job.id)).for('no key update');
+          await tx.insert(stageTable).values({ ...createStageBody, jobId: job.id, order: 1 });
           signalJobHeld();
           await jobReleased;
         });
@@ -707,13 +696,9 @@ describe('stage', function () {
 
         const responsePromise = requestSender.addStageV1({
           requestBody: { data: {}, type: 'SECOND_STAGE', userMetadata: {} },
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
-        await waitForQueryBlockedOnLock(async () => {
-          const [row] = await prisma.$queryRaw<{ waiting: number }[]>`
-            SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
-          return row!.waiting;
-        });
+        await waitForQueryBlockedOnLock(drizzle);
 
         releaseJob();
         await concurrentAddStage;
@@ -1154,8 +1139,7 @@ describe('stage', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
-        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -1322,10 +1306,10 @@ describe('stage', function () {
 
       it('should return 500 with a clear message when the previous stage is missing from the job', async function () {
         // A job whose only stage has order 2, so the stage it waits for doesn't exist.
-        const { stage } = await createJobnikTree(prisma, {}, { order: 2 }, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, { order: 2 }, [], { createStage: true, createTasks: false });
 
         const updateStageResponse = await requestSender.updateStageStatusV1({
-          pathParams: { stageId: stage.id as StageId },
+          pathParams: { stageId: stage.id },
           requestBody: { status: StageOperationStatus.PENDING },
         });
 

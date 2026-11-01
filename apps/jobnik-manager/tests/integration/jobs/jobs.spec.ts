@@ -1,9 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { describe, beforeEach, afterEach, it, expect, beforeAll } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
-import { jsLogger } from '@map-colonies/js-logger';
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
-import { trace } from '@opentelemetry/api';
 import { StatusCodes } from 'http-status-codes';
 import {
   createRequestSender,
@@ -12,9 +10,10 @@ import {
   type RequestSender,
 } from '@map-colonies/openapi-helpers/requestSender';
 import { openapiFilePath, type paths, type operations, type JobId } from 'jobnik-openapi';
+import { eq } from 'drizzle-orm';
 import type { Drizzle } from '@src/db/drizzle';
-import { getApp } from '@src/app';
-import { SERVICES, successMessages } from '@common/constants';
+import { jobTable } from '@src/db/entities';
+import { successMessages } from '@common/constants';
 import { initConfig } from '@src/common/config';
 import { errorMessages as jobsErrorMessages } from '@src/jobs/models/errors';
 import { defaultStatusCounts } from '@src/stages/models/helper';
@@ -28,7 +27,7 @@ import type { JobCreateModel } from '@src/jobs/models/models';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 import { JobOperationStatus, Priority, StageOperationStatus } from '@src/db/persistenceModel';
-import { createJobnikTree, endDatabasePool, truncateAllTables, waitForQueryBlockedOnLock } from '../common/utils';
+import { createJobnikTree, endDatabasePool, setupIntegrationApp, teardownIntegrationApp, waitForQueryBlockedOnLock } from '../common/utils';
 import { createJobRecord, createJobRequestBody, testJobId } from './helpers';
 
 const memoryExporter = new InMemorySpanExporter();
@@ -48,22 +47,13 @@ describe('job', function () {
   });
 
   beforeEach(async function () {
-    let app;
-    [app, container] = await getApp({
-      override: [
-        { token: SERVICES.LOGGER, provider: { useValue: jsLogger({ enabled: false }) } },
-        { token: SERVICES.TRACER, provider: { useValue: trace.getTracer('testTracer') } },
-      ],
-      useChild: true,
-    });
-
-    requestSender = await createRequestSender<paths, operations>(openapiFilePath, app);
-    drizzle = container.resolve<Drizzle>(SERVICES.DRIZZLE);
-    await truncateAllTables(drizzle);
+    const integrationApp = await setupIntegrationApp();
+    ({ container, drizzle } = integrationApp);
+    requestSender = await createRequestSender<paths, operations>(openapiFilePath, integrationApp.app);
   });
 
   afterEach(async function () {
-    await endDatabasePool(container);
+    await teardownIntegrationApp(container);
     memoryExporter.reset();
   });
 
@@ -185,8 +175,11 @@ describe('job', function () {
         let alphaMarchId: string;
 
         const createJobAt = async (name: string, creationTime: string): Promise<string> => {
-          const job = await createJobRecord({ ...createJobRequestBody, name }, prisma);
-          await prisma.job.update({ where: { id: job.id }, data: { creationTime: new Date(creationTime) } });
+          const job = await createJobRecord({ ...createJobRequestBody, name }, drizzle);
+          await drizzle
+            .update(jobTable)
+            .set({ creationTime: new Date(creationTime) })
+            .where(eq(jobTable.id, job.id));
           return job.id;
         };
 
@@ -706,7 +699,7 @@ describe('job', function () {
 
     describe('Bad Path', function () {
       it('should return 400 when a concurrent status change committed first and made the transition illegal', async function () {
-        const job = await createJobRecord(createJobRequestBody, prisma);
+        const job = await createJobRecord(createJobRequestBody, drizzle);
 
         let releaseRow!: () => void;
         const rowReleased = new Promise<void>((resolve) => {
@@ -718,22 +711,21 @@ describe('job', function () {
         });
 
         // Aborts the job in a transaction that stays open, so the request has to wait for it.
-        const concurrentAbort = prisma.$transaction(async (tx) => {
-          await tx.job.update({ where: { id: job.id }, data: { status: JobOperationStatus.ABORTED, xstate: abortedXstatePersistentSnapshot } });
+        const concurrentAbort = drizzle.transaction(async (tx) => {
+          await tx
+            .update(jobTable)
+            .set({ status: JobOperationStatus.ABORTED, xstate: abortedXstatePersistentSnapshot })
+            .where(eq(jobTable.id, job.id));
           signalRowHeld();
           await rowReleased;
         });
         await rowHeld;
 
         const responsePromise = requestSender.updateStatusV1({
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
           requestBody: { status: JobOperationStatus.ABORTED },
         });
-        await waitForQueryBlockedOnLock(async () => {
-          const [row] = await prisma.$queryRaw<{ waiting: number }[]>`
-            SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
-          return row!.waiting;
-        });
+        await waitForQueryBlockedOnLock(drizzle);
 
         releaseRow();
         await concurrentAbort;

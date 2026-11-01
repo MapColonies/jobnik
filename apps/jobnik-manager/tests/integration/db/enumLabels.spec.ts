@@ -1,14 +1,10 @@
 import { describe, beforeAll, afterAll, it, expect } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
-import { jsLogger } from '@map-colonies/js-logger';
-import { trace } from '@opentelemetry/api';
 import { sql } from 'drizzle-orm';
 import type { Drizzle } from '@src/db/drizzle';
-import { getApp } from '@src/app';
-import { SERVICES } from '@common/constants';
 import { initConfig } from '@src/common/config';
 import { JobOperationStatus, Priority, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
-import { endDatabasePool } from '../common/utils';
+import { setupIntegrationApp, teardownIntegrationApp } from '../common/utils';
 
 describe('database enum labels', () => {
   let drizzle: Drizzle;
@@ -16,19 +12,11 @@ describe('database enum labels', () => {
 
   beforeAll(async function () {
     await initConfig(true);
-    [, container] = await getApp({
-      override: [
-        { token: SERVICES.LOGGER, provider: { useValue: jsLogger({ enabled: false }) } },
-        { token: SERVICES.TRACER, provider: { useValue: trace.getTracer('testTracer') } },
-      ],
-      useChild: true,
-    });
-
-    drizzle = container.resolve<Drizzle>(SERVICES.DRIZZLE);
+    ({ container, drizzle } = await setupIntegrationApp());
   });
 
   afterAll(async function () {
-    await endDatabasePool(container);
+    await teardownIntegrationApp(container);
   });
 
   it.each([

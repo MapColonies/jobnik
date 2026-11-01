@@ -1,20 +1,16 @@
 import { describe, beforeEach, afterEach, it, expect, beforeAll, vi } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
-import { jsLogger } from '@map-colonies/js-logger';
-import { trace } from '@opentelemetry/api';
 import { addMinutes, subMinutes } from 'date-fns';
 import type { StageId } from 'jobnik-openapi';
 import { DrizzleQueryError } from 'drizzle-orm';
 import type { Drizzle } from '@src/db/drizzle';
-import { getApp } from '@src/app';
-import { SERVICES } from '@common/constants';
 import { getConfig, initConfig } from '@src/common/config';
 import { inProgressStageXstatePersistentSnapshot } from '@tests/unit/data';
 import { defaultStatusCounts } from '@src/stages/models/helper';
 import { TaskManager } from '@src/tasks/models/manager';
 import { TaskRepository } from '@src/tasks/DAL/taskRepository';
 import { TaskOperationStatus, StageOperationStatus, JobOperationStatus } from '@src/db/persistenceModel';
-import { createJobnikTree, endDatabasePool, truncateAllTables } from '../common/utils';
+import { createJobnikTree, endDatabasePool, setupIntegrationApp, teardownIntegrationApp } from '../common/utils';
 
 describe('TaskSweeper', () => {
   let drizzle: Drizzle;
@@ -26,22 +22,14 @@ describe('TaskSweeper', () => {
   });
 
   beforeEach(async function () {
-    [, container] = await getApp({
-      override: [
-        { token: SERVICES.LOGGER, provider: { useValue: jsLogger({ enabled: false }) } },
-        { token: SERVICES.TRACER, provider: { useValue: trace.getTracer('testTracer') } },
-      ],
-      useChild: true,
-    });
+    ({ container, drizzle } = await setupIntegrationApp());
 
-    drizzle = container.resolve<Drizzle>(SERVICES.DRIZZLE);
     taskManager = container.resolve(TaskManager);
-    await truncateAllTables(drizzle);
   });
 
   afterEach(async function () {
     vi.restoreAllMocks();
-    await endDatabasePool(container);
+    await teardownIntegrationApp(container);
     vi.resetModules();
   });
 

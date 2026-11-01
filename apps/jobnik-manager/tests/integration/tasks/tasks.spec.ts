@@ -1,8 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { describe, beforeEach, afterEach, it, expect, beforeAll, vi } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
-import { jsLogger } from '@map-colonies/js-logger';
-import { trace } from '@opentelemetry/api';
 import { StatusCodes } from 'http-status-codes';
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
 import {
@@ -16,8 +14,6 @@ import { openapiFilePath, type paths, type operations, type StageId, type TaskId
 import { and, DrizzleQueryError, eq, sql } from 'drizzle-orm';
 import type { Drizzle } from '@src/db/drizzle';
 import { taskTable } from '@src/db/entities';
-import { getApp } from '@src/app';
-import { SERVICES } from '@common/constants';
 import { initConfig } from '@src/common/config';
 import { errorMessages as tasksErrorMessages } from '@src/tasks/models/errors';
 import { errorMessages as stagesErrorMessages } from '@src/stages/models/errors';
@@ -37,7 +33,7 @@ import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 import { JobOperationStatus, Priority, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 import { createJobRequestBody } from '../jobs/helpers';
 import { addJobRecord, addStageRecord, createStageBody } from '../stages/helpers';
-import { createJobnikTree, endDatabasePool, truncateAllTables, waitForQueryBlockedOnLock } from '../common/utils';
+import { createJobnikTree, endDatabasePool, setupIntegrationApp, teardownIntegrationApp, waitForQueryBlockedOnLock } from '../common/utils';
 import { createTaskBody, createTaskRecords } from './helpers';
 
 const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(expect);
@@ -57,23 +53,14 @@ describe('task', function () {
   });
 
   beforeEach(async function () {
-    let app;
-    [app, container] = await getApp({
-      override: [
-        { token: SERVICES.LOGGER, provider: { useValue: jsLogger({ enabled: false }) } },
-        { token: SERVICES.TRACER, provider: { useValue: trace.getTracer('testTracer') } },
-      ],
-      useChild: true,
-    });
-
-    requestSender = await createRequestSender<paths, operations>(openapiFilePath, app);
-    drizzle = container.resolve<Drizzle>(SERVICES.DRIZZLE);
-    await truncateAllTables(drizzle);
+    const integrationApp = await setupIntegrationApp();
+    ({ container, drizzle } = integrationApp);
+    requestSender = await createRequestSender<paths, operations>(openapiFilePath, integrationApp.app);
   });
 
   afterEach(async function () {
     vi.restoreAllMocks();
-    await endDatabasePool(container);
+    await teardownIntegrationApp(container);
     memoryExporter.reset();
   });
 
@@ -142,11 +129,13 @@ describe('task', function () {
         let betaPendingMarchId: string;
 
         beforeEach(async function () {
-          const alpha = await createJobnikTree(prisma, {}, { type: 'alpha' }, [
+          const alpha = await createJobnikTree(drizzle, {}, { type: 'alpha' }, [
             { status: TaskOperationStatus.PENDING, creationTime: new Date(january) },
             { status: TaskOperationStatus.COMPLETED, creationTime: new Date(february) },
           ]);
-          const beta = await createJobnikTree(prisma, {}, { type: 'beta' }, [{ status: TaskOperationStatus.PENDING, creationTime: new Date(march) }]);
+          const beta = await createJobnikTree(drizzle, {}, { type: 'beta' }, [
+            { status: TaskOperationStatus.PENDING, creationTime: new Date(march) },
+          ]);
           alphaStageId = alpha.stage.id;
           betaStageId = beta.stage.id;
           alphaPendingJanuaryId = alpha.tasks[0]!.id;
@@ -1933,15 +1922,7 @@ describe('task', function () {
           requestSender.updateTaskStatusV1({ pathParams: { taskId: taskId }, requestBody: { status: TaskOperationStatus.COMPLETED } }),
         ];
 
-        // Integration test files run one at a time, so the only queries waiting on a lock are these updates
-        await waitForQueryBlockedOnLock(async () => {
-          const {
-            rows: [row],
-          } = await drizzle.execute<{ waiting: number }>(
-            sql`SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`
-          );
-          return row!.waiting;
-        }, updatePromises.length);
+        await waitForQueryBlockedOnLock(drizzle, updatePromises.length);
         releaseLock();
         await lockHolder;
 
