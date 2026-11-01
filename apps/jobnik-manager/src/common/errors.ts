@@ -1,10 +1,5 @@
 import type { JobOperationStatus, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 
-export const prismaKnownErrors = {
-  /**An operation failed because it depends on one or more records that were required but not found. {cause} */
-  recordNotFound: 'P2025',
-} as const;
-
 export function illegalStatusTransitionErrorMessage(
   currentStatus: JobOperationStatus | StageOperationStatus | TaskOperationStatus,
   requiredStatus: JobOperationStatus | StageOperationStatus | TaskOperationStatus
