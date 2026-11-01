@@ -36,8 +36,8 @@ import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 import { JobOperationStatus, Priority, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 import { createJobRequestBody } from '../jobs/helpers';
 import { addJobRecord, addStageRecord, createStageBody } from '../stages/helpers';
-import { createJobnikTree, endDatabasePool, truncateAllTables } from '../common/utils';
-import { createTaskBody, createTaskRecords, waitForBlockedTaskUpdates } from './helpers';
+import { createJobnikTree, endDatabasePool, truncateAllTables, waitForQueryBlockedOnLock } from '../common/utils';
+import { createTaskBody, createTaskRecords } from './helpers';
 
 const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(expect);
 
@@ -584,6 +584,25 @@ describe('task', function () {
         expect(getStageResponse.body).toHaveProperty('summary', { ...defaultStatusCounts, pending: 2, total: 2 });
       });
 
+      it('should return 201 and create every task when the batch exceeds the bind-parameter limit of one insert', async function () {
+        // enough rows to pass Postgres's 65,535 bind-parameter limit if they were sent as a single INSERT
+        const taskCount = 8000;
+        const { stage } = await createJobnikTree(prisma, {}, { summary: defaultStatusCounts }, [], { createStage: true, createTasks: false });
+
+        const response = await requestSender.addTasksV1({
+          requestBody: Array.from({ length: taskCount }, () => ({ data: {}, userMetadata: {} })),
+          pathParams: { stageId: stage.id as StageId },
+        });
+
+        expect(response).toHaveProperty('status', StatusCodes.CREATED);
+        expect(response.body).toHaveLength(taskCount);
+        await expect(prisma.task.count({ where: { stageId: stage.id } })).resolves.toBe(taskCount);
+
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id as StageId } });
+
+        expect(getStageResponse.body).toHaveProperty('summary', { ...defaultStatusCounts, pending: taskCount, total: taskCount });
+      });
+
       it('should return 200 and create new tasks for stage with existing tasks', async function () {
         const { stage } = await createJobnikTree(prisma, {}, {}, [
           { status: TaskOperationStatus.COMPLETED, xstate: completedStageXstatePersistentSnapshot },
@@ -694,7 +713,10 @@ describe('task', function () {
 
     describe('Bad Path', function () {
       it('should return 400 when supplying bad uuid', async function () {
-        const addTasksResponse = await requestSender.addTasksV1({ requestBody: [], pathParams: { stageId: 'someInvalidStageId' as StageId } });
+        const addTasksResponse = await requestSender.addTasksV1({
+          requestBody: [{ data: {}, userMetadata: {} }],
+          pathParams: { stageId: 'someInvalidStageId' as StageId },
+        });
 
         expect(addTasksResponse).toMatchObject({
           status: StatusCodes.BAD_REQUEST,
@@ -717,6 +739,18 @@ describe('task', function () {
         });
       });
 
+      it('should return 400 when the request body is an empty array', async function () {
+        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+
+        const addTasksResponse = await requestSender.addTasksV1({ requestBody: [], pathParams: { stageId: stage.id as StageId } });
+
+        expect(addTasksResponse).toSatisfyApiSpec();
+        expect(addTasksResponse).toMatchObject({
+          status: StatusCodes.BAD_REQUEST,
+          body: { message: expect.stringMatching(/request\/body must NOT have fewer than 1 items/) as string, code: 'VALIDATION_ERROR' },
+        });
+      });
+
       it('should return 400 when attempting to add tasks to a finalized stage', async function () {
         const { stage } = await createJobnikTree(
           prisma,
@@ -727,7 +761,10 @@ describe('task', function () {
         );
         const stageId = stage.id;
 
-        const addTasksResponse = await requestSender.addTasksV1({ requestBody: [], pathParams: { stageId: stageId as StageId } });
+        const addTasksResponse = await requestSender.addTasksV1({
+          requestBody: [{ data: {}, userMetadata: {} }],
+          pathParams: { stageId: stageId as StageId },
+        });
 
         expect(addTasksResponse).toSatisfyApiSpec();
         expect(addTasksResponse).toMatchObject({
@@ -746,7 +783,10 @@ describe('task', function () {
         );
         const stageId = stage.id;
 
-        const addTasksResponse = await requestSender.addTasksV1({ requestBody: [], pathParams: { stageId: stageId as StageId } });
+        const addTasksResponse = await requestSender.addTasksV1({
+          requestBody: [{ data: {}, userMetadata: {} }],
+          pathParams: { stageId: stageId as StageId },
+        });
 
         expect(addTasksResponse).toSatisfyApiSpec();
         expect(addTasksResponse).toMatchObject({
@@ -800,7 +840,7 @@ describe('task', function () {
         await endDatabasePool(container);
 
         const response = await requestSender.addTasksV1({
-          requestBody: [],
+          requestBody: [{ data: {}, userMetadata: {} }],
           pathParams: { stageId: faker.string.uuid() as StageId },
         });
 
@@ -1898,7 +1938,12 @@ describe('task', function () {
           requestSender.updateTaskStatusV1({ pathParams: { taskId: taskId }, requestBody: { status: TaskOperationStatus.COMPLETED } }),
         ];
 
-        await waitForBlockedTaskUpdates(prisma, updatePromises.length);
+        // Integration test files run one at a time, so the only queries waiting on a lock are these updates
+        await waitForQueryBlockedOnLock(async () => {
+          const [row] = await prisma.$queryRaw<{ waiting: number }[]>`
+            SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+          return row!.waiting;
+        }, updatePromises.length);
         releaseLock();
         await lockHolder;
 

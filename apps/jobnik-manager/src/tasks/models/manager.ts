@@ -4,6 +4,7 @@ import { createActor } from 'xstate';
 import { trace, type Tracer } from '@opentelemetry/api';
 import { withSpanAsyncV4 } from '@map-colonies/tracing-utils';
 import { subMinutes } from 'date-fns';
+import { chunk } from 'lodash';
 import { INFRA_CONVENTIONS } from '@map-colonies/semantic-conventions';
 import type { StageId, TaskId } from 'jobnik-openapi';
 import {
@@ -30,6 +31,9 @@ import { TaskRepository } from '../DAL/taskRepository';
 import type { TasksFindCriteriaArg, TaskModel, TaskCreateModel, TasksPaginatedResponse, TasksByStageIdQuery } from './models';
 import { errorMessages as tasksErrorMessages } from './errors';
 import { convertArrayTaskRowToResponse, convertTaskRowToResponse } from './helper';
+
+// Postgres caps a statement at 65,535 bind parameters and each task row binds ~9, so large batches are inserted in chunks
+const TASK_INSERT_BATCH_SIZE = 1000;
 
 @injectable()
 export class TaskManager {
@@ -91,7 +95,10 @@ export class TaskManager {
 
     try {
       const tasks = await this.drizzle.transaction(async (tx) => {
-        const tasks = await tx.insert(taskTable).values(taskInput).returning();
+        const tasks: Task[] = [];
+        for (const batch of chunk(taskInput, TASK_INSERT_BATCH_SIZE)) {
+          tasks.push(...(await tx.insert(taskTable).values(batch).returning()));
+        }
 
         const updateSummaryPayload: UpdateSummaryCount = {
           add: { status: TaskOperationStatus.PENDING, count: tasks.length },
