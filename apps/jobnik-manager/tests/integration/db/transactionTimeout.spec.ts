@@ -1,3 +1,4 @@
+import { setTimeout } from 'node:timers/promises';
 import { describe, beforeAll, afterAll, it, expect } from 'vitest';
 import type { Pool } from 'pg';
 import { sql } from 'drizzle-orm';
@@ -27,6 +28,20 @@ describe('transaction timeout', () => {
     });
 
     await expect(promise).rejects.toMatchObject({ cause: { message: expect.stringContaining('statement timeout') as unknown } });
+  });
+
+  it('should reject a transaction that stays idle longer than the timeout and keep the pool working', async function () {
+    const promise = drizzle.transaction(async (tx) => {
+      await tx.execute(sql`select 1`);
+      await setTimeout(TRANSACTION_TIMEOUT_MS * 3);
+      await tx.execute(sql`select 2`);
+    });
+
+    await expect(promise).rejects.toThrow();
+
+    const { rows } = await drizzle.execute<{ value: number }>(sql`select 1 as "value"`);
+
+    expect(rows[0]?.value).toBe(1);
   });
 
   it('should commit a transaction that finishes within the timeout', async function () {
