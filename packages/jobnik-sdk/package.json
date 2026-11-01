@@ -77,7 +77,7 @@
     "openapi-fetch": "^0.14.0",
     "openapi-types": "catalog:",
     "openapi-typescript-helpers": "^0.0.15",
-    "opossum": "^9.0.0",
+    "opossum": "^10.0.0",
     "undici": "^8.12.3"
   },
   "peerDependencies": {

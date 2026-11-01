@@ -467,8 +467,8 @@ importers:
         specifier: ^0.0.15
         version: 0.0.15
       opossum:
-        specifier: ^9.0.0
-        version: 9.0.0
+        specifier: ^10.0.0
+        version: 10.0.0
       undici:
         specifier: 8.12.3
         version: 8.12.3
@@ -4671,9 +4671,9 @@ packages:
   openapi-validator@0.14.2:
     resolution: {integrity: sha512-bgRQLZoxmECTjRxfpyMorad1ll58biUdV+31ALsHW2gRzdtMscI4Qm/wuhG8HsDUMGQkVLQYzUgJijNGKD65Og==}
 
-  opossum@9.0.0:
-    resolution: {integrity: sha512-K76U0QkxOfUZamneQuzz+AP0fyfTJcCplZ2oZL93nxeupuJbN4s6uFNbmVCt4eWqqGqRnnowdFuBicJ1fLMVxw==}
-    engines: {node: ^24 || ^22 || ^20}
+  opossum@10.0.0:
+    resolution: {integrity: sha512-sghtqL8Usj+et06Zui0nyn0R6FFsl7cyuoU+d7MctYU0nbS7Htzjleh+tWohFqk1Rp1srrFwbFa8Vxd0O64w6A==}
+    engines: {node: ^26 || ^24 || ^22}
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -9919,7 +9919,7 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  opossum@9.0.0: {}
+  opossum@10.0.0: {}
 
   optionator@0.9.4:
     dependencies:
