@@ -1,3 +1,4 @@
+import type { PaginationParams } from '@map-colonies/drizzle-utils';
 import type { components, operations } from 'jobnik-openapi';
 import type { Stage, Task } from '@src/db/persistenceModel';
 
@@ -10,14 +11,12 @@ type TasksByStageIdQuery = operations['getTasksByStageIdV1']['parameters']['quer
 /**
  * Criteria for searching tasks; filters that are not set are ignored
  */
-interface TaskSearchParams {
+interface TaskSearchParams extends Partial<PaginationParams> {
   stageId?: Task['stageId'];
   stageType?: Stage['type'];
   status?: Task['status'];
   fromDate?: Date;
   endDate?: Date;
-  page?: number;
-  pageSize?: number;
 }
 
 export type { TaskModel, TaskCreateModel, TasksFindCriteriaArg, TasksPaginatedResponse, TasksByStageIdQuery, TaskSearchParams };

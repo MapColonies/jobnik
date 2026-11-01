@@ -6,10 +6,8 @@ import { SERVICES } from '@src/common/constants';
 import type { Drizzle, DrizzleTx, TaskFilter } from '@src/db/drizzle';
 import { jobTable, relations, stageTable, taskTable } from '@src/db/entities';
 import { JobOperationStatus, StageOperationStatus, TaskOperationStatus, type NewTask, type Task } from '@src/db/persistenceModel';
-import type { PaginatedResult } from '@src/common/utils/pagination';
+import { DEFAULT_PAGE, type PaginatedResult } from '@src/common/utils/pagination';
 import type { TaskSearchParams } from '../models/models';
-
-const DEFAULT_PAGE = 1;
 
 const DEQUEUE_TASK_STATUSES = [TaskOperationStatus.PENDING, TaskOperationStatus.RETRIED];
 const DEQUEUE_STAGE_STATUSES = [StageOperationStatus.PENDING, StageOperationStatus.IN_PROGRESS];

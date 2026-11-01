@@ -133,6 +133,92 @@ describe('task', function () {
         expect(response.body).toHaveProperty('items.length', 1);
       });
 
+      describe('stage, status and creation time filters', function () {
+        const january = '2025-01-01T00:00:00.000Z';
+        const february = '2025-02-01T00:00:00.000Z';
+        const march = '2025-03-01T00:00:00.000Z';
+        let alphaStageId: string;
+        let betaStageId: string;
+        let alphaPendingJanuaryId: string;
+        let alphaCompletedFebruaryId: string;
+        let betaPendingMarchId: string;
+
+        beforeEach(async function () {
+          const alpha = await createJobnikTree(prisma, {}, { type: 'alpha' }, [
+            { status: TaskOperationStatus.PENDING, creationTime: new Date(january) },
+            { status: TaskOperationStatus.COMPLETED, creationTime: new Date(february) },
+          ]);
+          const beta = await createJobnikTree(prisma, {}, { type: 'beta' }, [{ status: TaskOperationStatus.PENDING, creationTime: new Date(march) }]);
+          alphaStageId = alpha.stage.id;
+          betaStageId = beta.stage.id;
+          alphaPendingJanuaryId = alpha.tasks[0]!.id;
+          alphaCompletedFebruaryId = alpha.tasks[1]!.id;
+          betaPendingMarchId = beta.tasks[0]!.id;
+        });
+
+        it('should return 200 with only the tasks of the stage matching stage_id', async function () {
+          const response = await requestSender.getTasksByCriteriaV1({ queryParams: { stage_id: alphaStageId as StageId } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((task) => task.id)).toEqual([alphaPendingJanuaryId, alphaCompletedFebruaryId]);
+        });
+
+        it('should return 200 with only the tasks matching the status filter', async function () {
+          const response = await requestSender.getTasksByCriteriaV1({ queryParams: { status: TaskOperationStatus.PENDING } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((task) => task.id)).toEqual([alphaPendingJanuaryId, betaPendingMarchId]);
+        });
+
+        it('should return 200 with the tasks created at or after from_date', async function () {
+          const response = await requestSender.getTasksByCriteriaV1({ queryParams: { from_date: february } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((task) => task.id)).toEqual([alphaCompletedFebruaryId, betaPendingMarchId]);
+        });
+
+        it('should return 200 with the tasks created at or before end_date', async function () {
+          const response = await requestSender.getTasksByCriteriaV1({ queryParams: { end_date: february } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((task) => task.id)).toEqual([alphaPendingJanuaryId, alphaCompletedFebruaryId]);
+        });
+
+        it('should return 200 with only the tasks matching both stage_type and status', async function () {
+          const response = await requestSender.getTasksByCriteriaV1({ queryParams: { stage_type: 'alpha', status: TaskOperationStatus.PENDING } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(1);
+          expect(response.body.items.map((task) => task.id)).toEqual([alphaPendingJanuaryId]);
+        });
+
+        it('should return 200 with no tasks when the combined filters match nothing', async function () {
+          const response = await requestSender.getTasksByCriteriaV1({
+            queryParams: { stage_id: betaStageId as StageId, status: TaskOperationStatus.COMPLETED },
+          });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(0);
+          expect(response.body.items).toEqual([]);
+        });
+      });
+
       it('should return 200 with empty array', async function () {
         const someRandomUuid = faker.string.uuid();
         const response = await requestSender.getTasksByCriteriaV1({ queryParams: { stage_id: someRandomUuid as StageId } });
