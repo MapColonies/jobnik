@@ -1,11 +1,17 @@
 import { faker } from '@faker-js/faker';
 import { type Snapshot } from 'xstate';
-import type { Prisma, PrismaClient } from '@prismaClient';
+import type { DependencyContainer } from 'tsyringe';
+import type { Pool } from 'pg';
+import type { Job as PrismaJob, Prisma, PrismaClient } from '@prismaClient';
 import type { JobCreateModel } from '@src/jobs/models/models';
-import type { JobOperationStatus, Job, Stage, Task } from '@src/db/persistenceModel';
+import { SERVICES } from '@common/constants';
+import type { JobOperationStatus, Stage, Task } from '@src/db/persistenceModel';
 import { createJobRecord, createJobRequestBody } from '../jobs/helpers';
 import { createStageBody, addStageRecord } from '../stages/helpers';
 import { createTaskBody, createTaskRecords } from '../tasks/helpers';
+
+const LOCK_WAIT_TIMEOUT_MS = 5000;
+const LOCK_WAIT_POLL_INTERVAL_MS = 20;
 
 type JobTestCreateModel = JobCreateModel & {
   id?: string;
@@ -103,6 +109,17 @@ export async function truncateAllTables(prisma: PrismaClient): Promise<void> {
 }
 
 /**
+ * Closes the app's database pool, so every following query of the app fails. Safe to call more than once.
+ * @param container - the app's dependency container
+ */
+export async function endDatabasePool(container: DependencyContainer): Promise<void> {
+  const pool = container.resolve<Pool>(SERVICES.PG_POOL);
+  if (!pool.ended) {
+    await pool.end();
+  }
+}
+
+/**
  * Creates a mock Prisma error for testing purposes.
  * Default message is 'Database error'.
  * The error is marked with a custom property to simulate a Prisma error.
@@ -128,9 +145,25 @@ export function createMockUnknownDbError(): Error {
   return error;
 }
 
+/**
+ * Waits until at least one database query is blocked waiting for a lock, for tests that need a request to queue behind a held row.
+ * @param countBlockedQueries - returns how many queries are currently waiting for a lock
+ * @param timeoutMs - how long to wait before failing
+ */
+export async function waitForQueryBlockedOnLock(countBlockedQueries: () => Promise<number>, timeoutMs = LOCK_WAIT_TIMEOUT_MS): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while ((await countBlockedQueries()) === 0) {
+    if (Date.now() > deadline) {
+      throw new Error(`No query was blocked on a lock within ${timeoutMs}ms`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, LOCK_WAIT_POLL_INTERVAL_MS));
+  }
+}
+
 // Type definitions using inheritance - cleaner hierarchy
 export interface JobOnlyTree {
-  readonly job: Job;
+  // Still a Prisma row: the fixtures are written through Prisma until the integration setup moves to Drizzle.
+  readonly job: PrismaJob;
 }
 
 export interface JobWithStageTree extends JobOnlyTree {

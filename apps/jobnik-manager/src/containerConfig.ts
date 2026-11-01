@@ -5,12 +5,15 @@ import type { DependencyContainer } from 'tsyringe/dist/typings/types';
 import { jsLogger } from '@map-colonies/js-logger';
 import { instanceCachingFactory, instancePerContainerCachingFactory } from 'tsyringe';
 import type { HealthCheck } from '@godaddy/terminus';
+import type { Pool } from 'pg';
+import { initConnection } from '@map-colonies/drizzle-utils';
 import type { PrismaClient } from '@prismaClient';
 import { type InjectionObject, registerDependencies } from '@common/dependencyRegistration';
 import { DB_CONNECTION_TIMEOUT, ROUTERS, SERVICES, SERVICE_NAME } from '@common/constants';
 import { getTracing } from '@common/tracing';
 import { getConfig } from './common/config';
 import { createConnectionOptions, createPrismaClient } from './db/createConnection';
+import { assertSupportedDbSchema, createDrizzle } from './db/drizzle';
 import { promiseTimeout } from './common/utils/promiseTimeout';
 import { SERVICE_METRICS_SYMBOL, serviceMetricsFactory } from './common/serviceMetrics';
 import { jobV1RouterFactory } from './api/v1/jobs/router';
@@ -26,6 +29,7 @@ export interface RegisterOptions {
 export const registerExternalValues = async (options?: RegisterOptions): Promise<DependencyContainer> => {
   const configInstance = getConfig();
   const dbConfig = configInstance.get('db');
+  assertSupportedDbSchema(dbConfig.schema);
 
   const loggerConfig = configInstance.get('telemetry.logger');
   const loggerRedactionSettings = { paths: ['data', 'response.data'], remove: true };
@@ -38,6 +42,13 @@ export const registerExternalValues = async (options?: RegisterOptions): Promise
   configInstance.initializeMetrics(metricsRegistry);
 
   const prismaClientConfig = createConnectionOptions(dbConfig);
+
+  let pool: Pool;
+  try {
+    pool = await initConnection(dbConfig);
+  } catch (error) {
+    throw new Error('Failed to connect to the database', { cause: error });
+  }
 
   /* v8 ignore next 7 -- @preserve */
   const healthCheck = (prisma: PrismaClient): HealthCheck => {
@@ -64,6 +75,15 @@ export const registerExternalValues = async (options?: RegisterOptions): Promise
         }),
       },
     },
+    { token: SERVICES.PG_POOL, provider: { useValue: pool } },
+    {
+      token: SERVICES.DRIZZLE,
+      provider: {
+        useFactory: instancePerContainerCachingFactory((container) => {
+          return createDrizzle(container.resolve<Pool>(SERVICES.PG_POOL));
+        }),
+      },
+    },
     {
       token: SERVICES.HEALTHCHECK,
       provider: {
@@ -83,15 +103,15 @@ export const registerExternalValues = async (options?: RegisterOptions): Promise
     {
       token: 'onSignal',
       provider: {
-        useValue: {
-          /* v8 ignore next 3 -- @preserve */
-          useValue: async (): Promise<void> => {
-            await Promise.all([getTracing().stop()]);
-          },
-        },
+        /* v8 ignore next 5 -- @preserve */
+        useFactory: instanceCachingFactory((container) => {
+          return async (): Promise<void> => {
+            await Promise.all([getTracing().stop(), container.resolve<Pool>(SERVICES.PG_POOL).end()]);
+          };
+        }),
       },
     },
   ];
 
-  return Promise.resolve(registerDependencies(dependencies, options?.override, options?.useChild));
+  return registerDependencies(dependencies, options?.override, options?.useChild);
 };

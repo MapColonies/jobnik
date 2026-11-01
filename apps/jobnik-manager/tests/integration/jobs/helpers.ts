@@ -2,9 +2,12 @@ import { createActor, type Snapshot } from 'xstate';
 import { faker } from '@faker-js/faker';
 import type { Prisma, PrismaClient } from '@prismaClient';
 import { jobStateMachine } from '@src/jobs/models/jobStateMachine';
-import type { JobCreateModel, JobPrismaObject } from '@src/jobs/models/models';
+import type { JobCreateModel } from '@src/jobs/models/models';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
 import type { JobOperationStatus } from '@src/db/persistenceModel';
+
+// Job fixtures are still written through Prisma; they move to Drizzle with the rest of the integration setup.
+type PrismaJobWithStages = Prisma.JobGetPayload<{ include: { stage: true } }>;
 
 type JobTestCreateModel = JobCreateModel & {
   id?: string;
@@ -12,7 +15,7 @@ type JobTestCreateModel = JobCreateModel & {
   status?: JobOperationStatus;
 };
 
-export const createJobRecord = async (body: JobTestCreateModel, prisma: PrismaClient): Promise<JobPrismaObject> => {
+export const createJobRecord = async (body: JobTestCreateModel, prisma: PrismaClient): Promise<PrismaJobWithStages> => {
   const persistedSnapshot = body.xstate ?? createActor(jobStateMachine).start().getPersistedSnapshot();
 
   const traceparent = body.traceparent ?? DEFAULT_TRACEPARENT;
@@ -40,3 +43,5 @@ export const createJobRequestBody = {
 
 export const testJobId = faker.string.uuid();
 export const testStageId = faker.string.uuid();
+
+export type { PrismaJobWithStages };

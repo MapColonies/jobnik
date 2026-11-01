@@ -1,4 +1,5 @@
-import type { $Enums, Job as PrismaJob, Stage as PrismaStage, Task as PrismaTask } from '@prismaClient';
+import type { $Enums, Stage as PrismaStage, Task as PrismaTask } from '@prismaClient';
+import type { jobTable } from './entities';
 
 /* eslint-disable @typescript-eslint/naming-convention */
 export const JobOperationStatus = {
@@ -47,7 +48,8 @@ export const Priority = {
 export type Priority = (typeof Priority)[keyof typeof Priority];
 /* eslint-enable @typescript-eslint/naming-convention */
 
-// Row types of the Persistence model. Aliases of Prisma's model types until the Drizzle cutover infers them from the table definitions.
-export type Job = PrismaJob;
+// Row types of the Persistence model, inferred from the table definitions. Stage and Task alias Prisma's model types until their cutover.
+export type Job = typeof jobTable.$inferSelect;
+export type NewJob = typeof jobTable.$inferInsert;
 export type Stage = PrismaStage;
 export type Task = PrismaTask;
