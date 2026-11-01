@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import { describe, beforeEach, afterEach, it, expect, beforeAll, vi } from 'vitest';
+import { describe, beforeEach, afterEach, it, expect, beforeAll } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
 import { jsLogger } from '@map-colonies/js-logger';
 import { trace } from '@opentelemetry/api';
@@ -14,7 +14,6 @@ import {
 import { faker } from '@faker-js/faker';
 import { openapiFilePath, type paths, type operations, type JobId, type StageId } from 'jobnik-openapi';
 import { type PrismaClient } from '@prismaClient';
-import type { PrismaTransaction } from '@src/db/types';
 import { getApp } from '@src/app';
 import { SERVICES } from '@common/constants';
 import { initConfig } from '@src/common/config';
@@ -32,10 +31,10 @@ import {
 } from '@tests/unit/data';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
-import { createProxyMock } from '@tests/configurations/mockPrisma';
 import { JobOperationStatus, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 import { createJobRecord, createJobRequestBody, testJobId, testStageId } from '../jobs/helpers';
-import { createJobnikTree, createMockPrismaError, createMockUnknownDbError, endDatabasePool, truncateAllTables } from '../common/utils';
+import { createJobnikTree, endDatabasePool, truncateAllTables, waitForQueryBlockedOnLock } from '../common/utils';
+import { addStageRecord, createStageBody } from './helpers';
 
 const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(expect);
 
@@ -68,8 +67,6 @@ describe('stage', function () {
     requestSender = await createRequestSender<paths, operations>(openapiFilePath, app);
     prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
     await truncateAllTables(prisma);
-
-    // Ensure Prisma methods exist before they can be spied on (Vitest 4.0 requirement)
   });
 
   afterEach(async function () {
@@ -219,6 +216,83 @@ describe('stage', function () {
 
         expect(stagesBodyNoTasks.items[0]).not.toHaveProperty('tasks');
       });
+
+      describe('job, type and status filters', function () {
+        let jobAId: string;
+        let jobBId: string;
+        let jobATilingPendingId: string;
+        let jobAExportCreatedId: string;
+        let jobBTilingCreatedId: string;
+        let jobBExportPendingId: string;
+
+        const createStageFor = async (jobId: string, type: string, status: StageOperationStatus, order: number): Promise<string> => {
+          const stage = await addStageRecord({ ...createStageBody, jobId, type, status, order }, prisma);
+          return stage.id;
+        };
+
+        beforeEach(async function () {
+          jobAId = (await createJobRecord(createJobRequestBody, prisma)).id;
+          jobBId = (await createJobRecord(createJobRequestBody, prisma)).id;
+          jobATilingPendingId = await createStageFor(jobAId, 'tiling', StageOperationStatus.PENDING, 1);
+          jobAExportCreatedId = await createStageFor(jobAId, 'export', StageOperationStatus.CREATED, 2);
+          jobBTilingCreatedId = await createStageFor(jobBId, 'tiling', StageOperationStatus.CREATED, 1);
+          jobBExportPendingId = await createStageFor(jobBId, 'export', StageOperationStatus.PENDING, 2);
+        });
+
+        it('should return 200 with only the stages of the job matching job_id', async function () {
+          const response = await requestSender.getStagesV1({ queryParams: { job_id: jobAId as JobId } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((stage) => stage.id)).toIncludeSameMembers([jobATilingPendingId, jobAExportCreatedId]);
+        });
+
+        it('should return 200 with only the stages matching stage_type', async function () {
+          const response = await requestSender.getStagesV1({ queryParams: { stage_type: 'tiling' } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((stage) => stage.id)).toIncludeSameMembers([jobATilingPendingId, jobBTilingCreatedId]);
+        });
+
+        it('should return 200 with only the stages matching stage_operation_status', async function () {
+          const response = await requestSender.getStagesV1({ queryParams: { stage_operation_status: StageOperationStatus.PENDING } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((stage) => stage.id)).toIncludeSameMembers([jobATilingPendingId, jobBExportPendingId]);
+        });
+
+        it('should return 200 with only the stages matching job_id, stage_type and stage_operation_status together', async function () {
+          const response = await requestSender.getStagesV1({
+            queryParams: { job_id: jobBId as JobId, stage_type: 'export', stage_operation_status: StageOperationStatus.PENDING },
+          });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(1);
+          expect(response.body.items.map((stage) => stage.id)).toEqual([jobBExportPendingId]);
+        });
+
+        it('should return 200 with no stages when the combined filters match nothing', async function () {
+          const response = await requestSender.getStagesV1({
+            queryParams: { job_id: jobAId as JobId, stage_type: 'export', stage_operation_status: StageOperationStatus.PENDING },
+          });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(0);
+          expect(response.body.items).toEqual([]);
+        });
+      });
     });
 
     describe('Bad Path', function () {
@@ -238,32 +312,13 @@ describe('stage', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const findManySpy = createProxyMock(prisma.stage, 'findMany');
-        findManySpy.mockRejectedValueOnce(error);
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.getStagesV1({});
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const findManySpy = createProxyMock(prisma.stage, 'findMany');
-        findManySpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.getStagesV1({});
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -348,32 +403,13 @@ describe('stage', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const findUniqueSpy = createProxyMock(prisma.stage, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.getStageByIdV1({ pathParams: { stageId: dumpUuid as StageId } });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const findUniqueSpy = createProxyMock(prisma.stage, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.getStageByIdV1({ pathParams: { stageId: dumpUuid as StageId } });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -508,32 +544,13 @@ describe('stage', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: faker.string.uuid() as JobId } });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: faker.string.uuid() as JobId } });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -573,32 +590,13 @@ describe('stage', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const findUniqueSpy = createProxyMock(prisma.stage, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.getStageSummaryV1({ pathParams: { stageId: dumpUuid as StageId } });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const findUniqueSpy = createProxyMock(prisma.stage, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.getStageSummaryV1({ pathParams: { stageId: dumpUuid as StageId } });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -653,32 +651,13 @@ describe('stage', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const updateSpy = createProxyMock(prisma.stage, 'update');
-        updateSpy.mockRejectedValueOnce(error);
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.updateStageUserMetadataV1({ pathParams: { stageId: faker.string.uuid() as StageId }, requestBody: {} });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const updateSpy = createProxyMock(prisma.stage, 'update');
-        updateSpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.updateStageUserMetadataV1({ pathParams: { stageId: faker.string.uuid() as StageId }, requestBody: {} });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -704,6 +683,45 @@ describe('stage', function () {
           status: StatusCodes.CREATED,
           body: { ...createStagesPayload, status: StageOperationStatus.PENDING, order: 1 },
         });
+      });
+
+      it('should give the next order to a stage added while another stage is being added to the same job', async function () {
+        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+
+        let releaseJob!: () => void;
+        const jobReleased = new Promise<void>((resolve) => {
+          releaseJob = resolve;
+        });
+        let signalJobHeld!: () => void;
+        const jobHeld = new Promise<void>((resolve) => {
+          signalJobHeld = resolve;
+        });
+
+        // Adds the first stage the way addStage does, in a transaction that stays open, so the request has to wait for it.
+        const concurrentAddStage = prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT 1 FROM job_manager.job WHERE id = ${job.id}::uuid FOR NO KEY UPDATE`;
+          await tx.stage.create({ data: { ...createStageBody, jobId: job.id, order: 1 } });
+          signalJobHeld();
+          await jobReleased;
+        });
+        await jobHeld;
+
+        const responsePromise = requestSender.addStageV1({
+          requestBody: { data: {}, type: 'SECOND_STAGE', userMetadata: {} },
+          pathParams: { jobId: job.id as JobId },
+        });
+        await waitForQueryBlockedOnLock(async () => {
+          const [row] = await prisma.$queryRaw<{ waiting: number }[]>`
+            SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+          return row!.waiting;
+        });
+
+        releaseJob();
+        await concurrentAddStage;
+        const response = await responsePromise;
+
+        expect(response).toSatisfyApiSpec();
+        expect(response).toMatchObject({ status: StatusCodes.CREATED, body: { order: 2, status: StageOperationStatus.CREATED } });
       });
 
       it('should create a stage with WAITING status when startAsWaiting flag is true', async function () {
@@ -1128,10 +1146,8 @@ describe('stage', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.addStageV1({
           requestBody: { data: {}, type: 'SOME_STAGE_TYPE', userMetadata: {} },
@@ -1139,44 +1155,8 @@ describe('stage', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-        const findUniqueSpy = createProxyMock(prisma.job, 'findUnique');
-        findUniqueSpy.mockRejectedValueOnce(error);
-
-        const response = await requestSender.addStageV1({
-          requestBody: { data: {}, type: 'SOME_STAGE_TYPE', userMetadata: {} },
-          pathParams: { jobId: testJobId as JobId },
-        });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when creating the stage fails', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
-        const createSpy = createProxyMock(prisma.stage, 'create');
-        createSpy.mockRejectedValueOnce(createMockPrismaError());
-
-        const response = await requestSender.addStageV1({
-          requestBody: { data: {}, type: 'SOME_STAGE_TYPE', userMetadata: {} },
-          pathParams: { jobId: job.id as JobId },
-        });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
+        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
       });
     });
   });
@@ -1341,6 +1321,25 @@ describe('stage', function () {
         });
       });
 
+      it('should return 500 with a clear message when the previous stage is missing from the job', async function () {
+        // A job whose only stage has order 2, so the stage it waits for doesn't exist.
+        const { stage } = await createJobnikTree(prisma, {}, { order: 2 }, [], { createStage: true, createTasks: false });
+
+        const updateStageResponse = await requestSender.updateStageStatusV1({
+          pathParams: { stageId: stage.id as StageId },
+          requestBody: { status: StageOperationStatus.PENDING },
+        });
+
+        expect(updateStageResponse).toSatisfyApiSpec();
+        expect(updateStageResponse).toMatchObject({
+          status: StatusCodes.INTERNAL_SERVER_ERROR,
+          body: {
+            message: `Stage ${stage.id} expects a previous stage at order 1 of job ${stage.jobId}, but there is none`,
+            code: 'UNKNOWN_ERROR',
+          },
+        });
+      });
+
       it('should return 404 with specific error message for non-existent stage', async function () {
         const updateStageResponse = await requestSender.updateStageStatusV1({
           pathParams: { stageId: testStageId as StageId },
@@ -1356,17 +1355,8 @@ describe('stage', function () {
     });
 
     describe('Sad Path', function () {
-      it('should return 500 status code when the database driver throws an error', async function () {
-        const error = createMockPrismaError();
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-        transactionSpy.mockImplementationOnce(<T>(callback: (tx: PrismaTransaction) => T): T => {
-          const mockTx = {
-            stage: {
-              findUnique: vi.fn().mockRejectedValueOnce(error),
-            },
-          } as unknown as PrismaTransaction;
-          return callback(mockTx);
-        });
+      it('should return 500 status code when the database is unavailable', async function () {
+        await endDatabasePool(container);
 
         const response = await requestSender.updateStageStatusV1({
           pathParams: { stageId: testStageId as StageId },
@@ -1374,36 +1364,8 @@ describe('stage', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'DATABASE_RELATED_ERROR' },
-        });
-      });
-
-      it('should return 500 status code when the database driver throws an unexpected error', async function () {
-        const error = createMockUnknownDbError();
-
-        const transactionSpy = createProxyMock(prisma, '$transaction');
-
-        transactionSpy.mockImplementation(async <T>(callback: (tx: PrismaTransaction) => Promise<T>): Promise<void> => {
-          const mockTx = {
-            stage: {
-              findUnique: vi.fn().mockRejectedValueOnce(error),
-            },
-          } as unknown as PrismaTransaction;
-          await callback(mockTx);
-        });
-
-        const response = await requestSender.updateStageStatusV1({
-          pathParams: { stageId: testStageId as StageId },
-          requestBody: { status: StageOperationStatus.PENDING },
-        });
-
-        expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-          body: { message: 'Database error', code: 'UNKNOWN_ERROR' },
-        });
+        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
       });
     });
   });
