@@ -1,3 +1,4 @@
+import type { PaginationParams } from '@map-colonies/drizzle-utils';
 import type { components, operations } from 'jobnik-openapi';
 import type { DrizzleTx } from '@src/db/drizzle';
 import type { Job, Stage, Task, TaskOperationStatus } from '@src/db/persistenceModel';
@@ -26,13 +27,11 @@ interface StageEntityOptions {
 /**
  * Criteria for searching stages; filters that are not set are ignored
  */
-interface StageSearchParams {
+interface StageSearchParams extends Partial<PaginationParams> {
   jobId?: Stage['jobId'];
   type?: Stage['type'];
   status?: Stage['status'];
   includeTasks?: boolean;
-  page?: number;
-  pageSize?: number;
 }
 
 /**

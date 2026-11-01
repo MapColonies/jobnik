@@ -33,7 +33,8 @@ import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 import { JobOperationStatus, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 import { createJobRecord, createJobRequestBody, testJobId, testStageId } from '../jobs/helpers';
-import { createJobnikTree, endDatabasePool, truncateAllTables } from '../common/utils';
+import { createJobnikTree, endDatabasePool, truncateAllTables, waitForQueryBlockedOnLock } from '../common/utils';
+import { addStageRecord, createStageBody } from './helpers';
 
 const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(expect);
 
@@ -214,6 +215,83 @@ describe('stage', function () {
         const stagesBodyNoTasks = response.body;
 
         expect(stagesBodyNoTasks.items[0]).not.toHaveProperty('tasks');
+      });
+
+      describe('job, type and status filters', function () {
+        let jobAId: string;
+        let jobBId: string;
+        let jobATilingPendingId: string;
+        let jobAExportCreatedId: string;
+        let jobBTilingCreatedId: string;
+        let jobBExportPendingId: string;
+
+        const createStageFor = async (jobId: string, type: string, status: StageOperationStatus, order: number): Promise<string> => {
+          const stage = await addStageRecord({ ...createStageBody, jobId, type, status, order }, prisma);
+          return stage.id;
+        };
+
+        beforeEach(async function () {
+          jobAId = (await createJobRecord(createJobRequestBody, prisma)).id;
+          jobBId = (await createJobRecord(createJobRequestBody, prisma)).id;
+          jobATilingPendingId = await createStageFor(jobAId, 'tiling', StageOperationStatus.PENDING, 1);
+          jobAExportCreatedId = await createStageFor(jobAId, 'export', StageOperationStatus.CREATED, 2);
+          jobBTilingCreatedId = await createStageFor(jobBId, 'tiling', StageOperationStatus.CREATED, 1);
+          jobBExportPendingId = await createStageFor(jobBId, 'export', StageOperationStatus.PENDING, 2);
+        });
+
+        it('should return 200 with only the stages of the job matching job_id', async function () {
+          const response = await requestSender.getStagesV1({ queryParams: { job_id: jobAId as JobId } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((stage) => stage.id)).toIncludeSameMembers([jobATilingPendingId, jobAExportCreatedId]);
+        });
+
+        it('should return 200 with only the stages matching stage_type', async function () {
+          const response = await requestSender.getStagesV1({ queryParams: { stage_type: 'tiling' } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((stage) => stage.id)).toIncludeSameMembers([jobATilingPendingId, jobBTilingCreatedId]);
+        });
+
+        it('should return 200 with only the stages matching stage_operation_status', async function () {
+          const response = await requestSender.getStagesV1({ queryParams: { stage_operation_status: StageOperationStatus.PENDING } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((stage) => stage.id)).toIncludeSameMembers([jobATilingPendingId, jobBExportPendingId]);
+        });
+
+        it('should return 200 with only the stages matching job_id, stage_type and stage_operation_status together', async function () {
+          const response = await requestSender.getStagesV1({
+            queryParams: { job_id: jobBId as JobId, stage_type: 'export', stage_operation_status: StageOperationStatus.PENDING },
+          });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(1);
+          expect(response.body.items.map((stage) => stage.id)).toEqual([jobBExportPendingId]);
+        });
+
+        it('should return 200 with no stages when the combined filters match nothing', async function () {
+          const response = await requestSender.getStagesV1({
+            queryParams: { job_id: jobAId as JobId, stage_type: 'export', stage_operation_status: StageOperationStatus.PENDING },
+          });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(0);
+          expect(response.body.items).toEqual([]);
+        });
       });
     });
 
@@ -605,6 +683,45 @@ describe('stage', function () {
           status: StatusCodes.CREATED,
           body: { ...createStagesPayload, status: StageOperationStatus.PENDING, order: 1 },
         });
+      });
+
+      it('should give the next order to a stage added while another stage is being added to the same job', async function () {
+        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+
+        let releaseJob!: () => void;
+        const jobReleased = new Promise<void>((resolve) => {
+          releaseJob = resolve;
+        });
+        let signalJobHeld!: () => void;
+        const jobHeld = new Promise<void>((resolve) => {
+          signalJobHeld = resolve;
+        });
+
+        // Adds the first stage the way addStage does, in a transaction that stays open, so the request has to wait for it.
+        const concurrentAddStage = prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT 1 FROM job_manager.job WHERE id = ${job.id}::uuid FOR NO KEY UPDATE`;
+          await tx.stage.create({ data: { ...createStageBody, jobId: job.id, order: 1 } });
+          signalJobHeld();
+          await jobReleased;
+        });
+        await jobHeld;
+
+        const responsePromise = requestSender.addStageV1({
+          requestBody: { data: {}, type: 'SECOND_STAGE', userMetadata: {} },
+          pathParams: { jobId: job.id as JobId },
+        });
+        await waitForQueryBlockedOnLock(async () => {
+          const [row] = await prisma.$queryRaw<{ waiting: number }[]>`
+            SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+          return row!.waiting;
+        });
+
+        releaseJob();
+        await concurrentAddStage;
+        const response = await responsePromise;
+
+        expect(response).toSatisfyApiSpec();
+        expect(response).toMatchObject({ status: StatusCodes.CREATED, body: { order: 2, status: StageOperationStatus.CREATED } });
       });
 
       it('should create a stage with WAITING status when startAsWaiting flag is true', async function () {
@@ -1038,7 +1155,8 @@ describe('stage', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
+        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
       });
     });
   });
@@ -1199,6 +1317,25 @@ describe('stage', function () {
           body: {
             message: 'Previous stage is not COMPLETED',
             code: 'ILLEGAL_STAGE_STATUS_TRANSITION',
+          },
+        });
+      });
+
+      it('should return 500 with a clear message when the previous stage is missing from the job', async function () {
+        // A job whose only stage has order 2, so the stage it waits for doesn't exist.
+        const { stage } = await createJobnikTree(prisma, {}, { order: 2 }, [], { createStage: true, createTasks: false });
+
+        const updateStageResponse = await requestSender.updateStageStatusV1({
+          pathParams: { stageId: stage.id as StageId },
+          requestBody: { status: StageOperationStatus.PENDING },
+        });
+
+        expect(updateStageResponse).toSatisfyApiSpec();
+        expect(updateStageResponse).toMatchObject({
+          status: StatusCodes.INTERNAL_SERVER_ERROR,
+          body: {
+            message: `Stage ${stage.id} expects a previous stage at order 1 of job ${stage.jobId}, but there is none`,
+            code: 'UNKNOWN_ERROR',
           },
         });
       });

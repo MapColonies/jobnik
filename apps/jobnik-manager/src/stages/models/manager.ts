@@ -8,6 +8,7 @@ import type { JobId, StageId } from 'jobnik-openapi';
 import { IllegalStageStatusTransitionError, JobInFiniteStateError, JobNotFoundError, StageNotFoundError } from 'jobnik-openapi';
 import { eq } from 'drizzle-orm';
 import { JobManager } from '@src/jobs/models/manager';
+import { JobRepository } from '@src/jobs/DAL/jobRepository';
 import { SERVICES, XSTATE_DONE_STATE } from '@common/constants';
 import { resolveTraceContext } from '@src/common/utils/tracingHelpers';
 import { jobStateMachine } from '@src/jobs/models/jobStateMachine';
@@ -40,7 +41,8 @@ export class StageManager {
     @inject(SERVICES.DRIZZLE) private readonly drizzle: Drizzle,
     @inject(SERVICES.TRACER) public readonly tracer: Tracer,
     @inject(StageRepository) private readonly stageRepository: StageRepository,
-    @inject(JobManager) private readonly jobManager: JobManager
+    @inject(JobManager) private readonly jobManager: JobManager,
+    @inject(JobRepository) private readonly jobRepository: JobRepository
   ) {}
 
   @withSpanAsyncV4
@@ -50,67 +52,71 @@ export class StageManager {
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
     });
 
-    const job = await this.jobManager.getJobEntityById(jobId);
-
-    if (!job) {
-      throw new JobNotFoundError(jobsErrorMessages.jobNotFound);
-    }
-    spanActive?.setAttributes({
-      [INFRA_CONVENTIONS.infra.jobnik.job.name]: job.name,
-      [ATTR_MESSAGING_DESTINATION_NAME]: stagePayload.type,
-    });
-
-    const checkJobStatus = createActor(jobStateMachine, { snapshot: job.xstate }).start();
-
-    // can't add stages to finite jobs (final states)
-    if (checkJobStatus.getSnapshot().status === XSTATE_DONE_STATE) {
-      throw new JobInFiniteStateError(jobsErrorMessages.jobAlreadyFinishedStagesError);
-    }
-
     const { startAsWaiting, ...bodyInput } = stagePayload;
     const { traceparent, tracestate } = resolveTraceContext(stagePayload);
 
-    const nextOrder = await this.getNextStageOrder(jobId);
+    const stage = await this.drizzle.transaction(async (tx) => {
+      // Locked so concurrent additions to the same job take turns computing the next order.
+      const job = await this.jobRepository.findAndLockJobById(jobId, tx);
 
-    const stagePersistenceSnapshot = getInitialXstate(stagePayload, nextOrder === 1);
-
-    let actualStatus;
-    if (startAsWaiting === true) {
-      actualStatus = StageOperationStatus.WAITING;
-    } else if (nextOrder === 1) {
-      actualStatus = StageOperationStatus.PENDING;
-    } else {
-      actualStatus = StageOperationStatus.CREATED;
-    }
-
-    const input = {
-      ...bodyInput,
-      order: nextOrder,
-      summary: defaultStatusCounts,
-      status: actualStatus,
-      jobId,
-      xstate: stagePersistenceSnapshot,
-      traceparent,
-      tracestate,
-    } satisfies NewStage;
-
-    try {
-      const [stage] = await this.drizzle.insert(stageTable).values(input).returning();
-      /* v8 ignore next 3 -- @preserve */
-      if (!stage) {
-        throw new Error('Failed to create stage: no row returned from database.');
+      if (!job) {
+        throw new JobNotFoundError(jobsErrorMessages.jobNotFound);
       }
-
       spanActive?.setAttributes({
-        [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stage.id,
+        [INFRA_CONVENTIONS.infra.jobnik.job.name]: job.name,
+        [ATTR_MESSAGING_DESTINATION_NAME]: stagePayload.type,
       });
 
-      return convertStageRowToResponse(stage);
-    } catch (error) {
-      this.logger.error(`Failed adding stage to job with error: ${(error as Error).message}`);
+      const checkJobStatus = createActor(jobStateMachine, { snapshot: job.xstate }).start();
 
-      throw error;
-    }
+      // can't add stages to finite jobs (final states)
+      if (checkJobStatus.getSnapshot().status === XSTATE_DONE_STATE) {
+        throw new JobInFiniteStateError(jobsErrorMessages.jobAlreadyFinishedStagesError);
+      }
+
+      const nextOrder = await this.getNextStageOrder(jobId, tx);
+
+      const stagePersistenceSnapshot = getInitialXstate(stagePayload, nextOrder === 1);
+
+      let actualStatus;
+      if (startAsWaiting === true) {
+        actualStatus = StageOperationStatus.WAITING;
+      } else if (nextOrder === 1) {
+        actualStatus = StageOperationStatus.PENDING;
+      } else {
+        actualStatus = StageOperationStatus.CREATED;
+      }
+
+      const input = {
+        ...bodyInput,
+        order: nextOrder,
+        summary: defaultStatusCounts,
+        status: actualStatus,
+        jobId,
+        xstate: stagePersistenceSnapshot,
+        traceparent,
+        tracestate,
+      } satisfies NewStage;
+
+      try {
+        const [insertedStage] = await tx.insert(stageTable).values(input).returning();
+        /* v8 ignore next 3 -- @preserve */
+        if (!insertedStage) {
+          throw new Error('Failed to create stage: no row returned from database.');
+        }
+        return insertedStage;
+      } catch (error) {
+        this.logger.error(`Failed adding stage to job with error: ${(error as Error).message}`);
+
+        throw error;
+      }
+    });
+
+    spanActive?.setAttributes({
+      [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stage.id,
+    });
+
+    return convertStageRowToResponse(stage);
   }
 
   @withSpanAsyncV4
@@ -287,7 +293,11 @@ export class StageManager {
         where: { jobId: { eq: stage.jobId }, order: { eq: previousStageOrder } },
       });
 
-      if (previousStage!.status !== StageOperationStatus.COMPLETED) {
+      if (!previousStage) {
+        throw new Error(`Stage ${stageId} expects a previous stage at order ${previousStageOrder} of job ${stage.jobId}, but there is none`);
+      }
+
+      if (previousStage.status !== StageOperationStatus.COMPLETED) {
         throw new IllegalStageStatusTransitionError(`Previous stage is not ${StageOperationStatus.COMPLETED}`);
       }
     }
@@ -384,13 +394,13 @@ export class StageManager {
    * @returns The next order number for a new stage in the job.
    */
   @withSpanAsyncV4
-  private async getNextStageOrder(jobId: JobId): Promise<number> {
+  private async getNextStageOrder(jobId: JobId, tx: DrizzleTx): Promise<number> {
     const spanActive = trace.getActiveSpan();
     spanActive?.setAttributes({
       [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: jobId,
     });
 
-    const maxOrder = await this.stageRepository.findMaxStageOrder(jobId);
+    const maxOrder = await this.stageRepository.findMaxStageOrder(jobId, tx);
 
     if (maxOrder === null) {
       return 1;

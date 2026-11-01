@@ -7,11 +7,9 @@ import { SERVICES } from '@src/common/constants';
 import type { Drizzle, DrizzleTx, StageFilter } from '@src/db/drizzle';
 import { stageTable } from '@src/db/entities';
 import { StageOperationStatus } from '@src/db/persistenceModel';
-import type { PaginatedResult } from '@src/common/utils/pagination';
+import { DEFAULT_PAGE, type PaginatedResult } from '@src/common/utils/pagination';
 import type { StageEntity, StageEntityOptions, StageRow, StageSearchParams, StageSummary, UpdateSummaryCount } from '../models/models';
 import { summaryCountsMapper, taskOperationStatusWithTotal } from '../models/helper';
-
-const DEFAULT_PAGE = 1;
 
 @scoped(Lifecycle.ContainerScoped)
 export class StageRepository {
@@ -77,10 +75,11 @@ export class StageRepository {
   /**
    * Finds the highest stage order of a job.
    * @param jobId - unique identifier of the job
+   * @param tx - transaction to run the query in
    * @returns the highest order, or null if the job has no stages
    */
-  public async findMaxStageOrder(jobId: JobId): Promise<number | null> {
-    const [result] = await this.drizzle
+  public async findMaxStageOrder(jobId: JobId, tx: DrizzleTx): Promise<number | null> {
+    const [result] = await tx
       .select({ maxOrder: max(stageTable.order) })
       .from(stageTable)
       .where(eq(stageTable.jobId, jobId));
