@@ -193,7 +193,8 @@ export class JobManager {
 
   @withSpanAsyncV4
   private async executeUpdateStatus(jobId: JobId, status: JobOperationStatus, tx: DrizzleTx): Promise<void> {
-    const job = await this.getJobEntityById(jobId, { tx });
+    // Locked so a concurrent status change waits and then validates its transition against this one's result.
+    const job = await this.jobRepository.findAndLockJobById(jobId, tx);
 
     if (!job) {
       throw new JobNotFoundError(jobsErrorMessages.jobNotFound);

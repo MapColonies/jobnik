@@ -1,14 +1,13 @@
 import { inject, Lifecycle, scoped } from 'tsyringe';
-import { relationsFilterToSQL } from 'drizzle-orm';
+import { eq, relationsFilterToSQL } from 'drizzle-orm';
 import { DEFAULT_PAGE_SIZE, paginationParamsToOffsetAndLimit } from '@map-colonies/drizzle-utils';
 import type { JobId } from 'jobnik-openapi';
 import { SERVICES } from '@src/common/constants';
 import type { Drizzle, DrizzleTx, JobFilter } from '@src/db/drizzle';
 import { jobTable } from '@src/db/entities';
-import type { PaginatedResult } from '@src/common/utils/pagination';
+import type { Job } from '@src/db/persistenceModel';
+import { DEFAULT_PAGE, type PaginatedResult } from '@src/common/utils/pagination';
 import type { JobRow, JobSearchParams } from '../models/models';
-
-const DEFAULT_PAGE = 1;
 
 @scoped(Lifecycle.ContainerScoped)
 export class JobRepository {
@@ -58,5 +57,17 @@ export class JobRepository {
       where: { id: { eq: jobId } },
       with: { stages: options.includeStages === true ? true : undefined },
     });
+  }
+
+  /**
+   * Finds a job by its id and locks its row until the transaction ends, so concurrent status changes of the same job run one after the other.
+   * Uses `FOR NO KEY UPDATE`, which doesn't block inserting stages that reference the job.
+   * @param jobId - unique identifier of the job
+   * @param tx - the transaction holding the lock
+   * @returns the job, or undefined if it doesn't exist
+   */
+  public async findAndLockJobById(jobId: JobId, tx: DrizzleTx): Promise<Job | undefined> {
+    const [job] = await tx.select().from(jobTable).where(eq(jobTable.id, jobId)).for('no key update');
+    return job;
   }
 }

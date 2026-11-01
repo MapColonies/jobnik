@@ -13,7 +13,7 @@ import { DB_CONNECTION_TIMEOUT, ROUTERS, SERVICES, SERVICE_NAME } from '@common/
 import { getTracing } from '@common/tracing';
 import { getConfig } from './common/config';
 import { createConnectionOptions, createPrismaClient } from './db/createConnection';
-import { createDrizzle } from './db/drizzle';
+import { assertSupportedDbSchema, createDrizzle } from './db/drizzle';
 import { promiseTimeout } from './common/utils/promiseTimeout';
 import { SERVICE_METRICS_SYMBOL, serviceMetricsFactory } from './common/serviceMetrics';
 import { jobV1RouterFactory } from './api/v1/jobs/router';
@@ -29,6 +29,7 @@ export interface RegisterOptions {
 export const registerExternalValues = async (options?: RegisterOptions): Promise<DependencyContainer> => {
   const configInstance = getConfig();
   const dbConfig = configInstance.get('db');
+  assertSupportedDbSchema(dbConfig.schema);
 
   const loggerConfig = configInstance.get('telemetry.logger');
   const loggerRedactionSettings = { paths: ['data', 'response.data'], remove: true };
@@ -102,10 +103,12 @@ export const registerExternalValues = async (options?: RegisterOptions): Promise
     {
       token: 'onSignal',
       provider: {
-        /* v8 ignore next 3 -- @preserve */
-        useValue: async (): Promise<void> => {
-          await Promise.all([getTracing().stop(), pool.end()]);
-        },
+        /* v8 ignore next 5 -- @preserve */
+        useFactory: instanceCachingFactory((container) => {
+          return async (): Promise<void> => {
+            await Promise.all([getTracing().stop(), container.resolve<Pool>(SERVICES.PG_POOL).end()]);
+          };
+        }),
       },
     },
   ];

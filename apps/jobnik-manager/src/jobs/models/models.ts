@@ -1,3 +1,4 @@
+import type { PaginationParams } from '@map-colonies/drizzle-utils';
 import type { components, operations } from 'jobnik-openapi';
 import type { Job, Stage } from '@src/db/persistenceModel';
 
@@ -15,7 +16,7 @@ type JobRow<IncludeStages extends boolean = boolean> = Job & (IncludeStages exte
 /**
  * Criteria for searching jobs; filters that are not set are ignored
  */
-interface JobSearchParams {
+interface JobSearchParams extends Partial<PaginationParams> {
   name?: Job['name'];
   priority?: Job['priority'];
   /** Only jobs created at or after this time */
@@ -23,8 +24,6 @@ interface JobSearchParams {
   /** Only jobs created at or before this time */
   endDate?: Date;
   includeStages?: boolean;
-  page?: number;
-  pageSize?: number;
 }
 
 export type { JobModel, JobCreateModel, JobFindCriteriaArg, JobRow, JobSearchParams, JobsPaginatedResponse };

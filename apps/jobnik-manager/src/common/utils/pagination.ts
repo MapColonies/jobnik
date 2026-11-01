@@ -10,8 +10,10 @@ interface PaginableDelegate {
   count: (args: never) => Prisma.PrismaPromise<number>;
 }
 
-const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
+
+/** The page returned when a search doesn't specify one */
+export const DEFAULT_PAGE = 1;
 
 export interface PaginatedResult<T> {
   total: number;

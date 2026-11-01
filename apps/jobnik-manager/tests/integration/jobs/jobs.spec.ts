@@ -18,12 +18,17 @@ import { SERVICES, successMessages } from '@common/constants';
 import { initConfig } from '@src/common/config';
 import { errorMessages as jobsErrorMessages } from '@src/jobs/models/errors';
 import { defaultStatusCounts } from '@src/stages/models/helper';
-import { abortedStageXstatePersistentSnapshot, completedStageXstatePersistentSnapshot, pendingStageXstatePersistentSnapshot } from '@tests/unit/data';
+import {
+  abortedStageXstatePersistentSnapshot,
+  abortedXstatePersistentSnapshot,
+  completedStageXstatePersistentSnapshot,
+  pendingStageXstatePersistentSnapshot,
+} from '@tests/unit/data';
 import type { JobCreateModel } from '@src/jobs/models/models';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 import { JobOperationStatus, Priority, StageOperationStatus } from '@src/db/persistenceModel';
-import { createJobnikTree, endDatabasePool, truncateAllTables } from '../common/utils';
+import { createJobnikTree, endDatabasePool, truncateAllTables, waitForQueryBlockedOnLock } from '../common/utils';
 import { createJobRecord, createJobRequestBody, testJobId } from './helpers';
 
 const memoryExporter = new InMemorySpanExporter();
@@ -170,6 +175,106 @@ describe('job', function () {
         expect(response.body.total).toBe(1);
         expect(response.body.items).toHaveLength(1);
         expect(response.body.items[0]).toHaveProperty('priority', Priority.MEDIUM);
+      });
+
+      describe('name and creation time filters', function () {
+        const january = '2025-01-01T00:00:00.000Z';
+        const february = '2025-02-01T00:00:00.000Z';
+        const march = '2025-03-01T00:00:00.000Z';
+        let alphaJanuaryId: string;
+        let betaFebruaryId: string;
+        let alphaMarchId: string;
+
+        const createJobAt = async (name: string, creationTime: string): Promise<string> => {
+          const job = await createJobRecord({ ...createJobRequestBody, name }, prisma);
+          await prisma.job.update({ where: { id: job.id }, data: { creationTime: new Date(creationTime) } });
+          return job.id;
+        };
+
+        beforeEach(async function () {
+          alphaJanuaryId = await createJobAt('alpha', january);
+          betaFebruaryId = await createJobAt('beta', february);
+          alphaMarchId = await createJobAt('alpha', march);
+        });
+
+        it('should return 200 with only the jobs matching the job_name filter', async function () {
+          const response = await requestSender.findJobsV1({ queryParams: { job_name: 'alpha' } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((job) => job.id)).toEqual([alphaJanuaryId, alphaMarchId]);
+        });
+
+        it('should return 200 with the jobs created at or after from_date', async function () {
+          const response = await requestSender.findJobsV1({ queryParams: { from_date: february } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((job) => job.id)).toEqual([betaFebruaryId, alphaMarchId]);
+        });
+
+        it('should return 200 with the jobs created at or before end_date', async function () {
+          const response = await requestSender.findJobsV1({ queryParams: { end_date: february } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((job) => job.id)).toEqual([alphaJanuaryId, betaFebruaryId]);
+        });
+
+        it('should return 200 with the jobs created between from_date and end_date', async function () {
+          const response = await requestSender.findJobsV1({ queryParams: { from_date: january, end_date: february } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((job) => job.id)).toEqual([alphaJanuaryId, betaFebruaryId]);
+        });
+
+        it('should return 200 with the single job created exactly when from_date and end_date are equal', async function () {
+          const response = await requestSender.findJobsV1({ queryParams: { from_date: february, end_date: february } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(1);
+          expect(response.body.items.map((job) => job.id)).toEqual([betaFebruaryId]);
+        });
+
+        it('should return 200 and compare dates given with a timezone offset as the same instant', async function () {
+          const response = await requestSender.findJobsV1({ queryParams: { from_date: '2025-02-01T02:00:00.000+02:00' } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(2);
+          expect(response.body.items.map((job) => job.id)).toEqual([betaFebruaryId, alphaMarchId]);
+        });
+
+        it('should return 200 with only the jobs matching both job_name and from_date', async function () {
+          const response = await requestSender.findJobsV1({ queryParams: { job_name: 'alpha', from_date: february } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.total).toBe(1);
+          expect(response.body.items.map((job) => job.id)).toEqual([alphaMarchId]);
+        });
+
+        it('should return 200 with the creation time of each job in the response', async function () {
+          const response = await requestSender.findJobsV1({ queryParams: { job_name: 'beta' } });
+
+          expectResponseStatus(response, 200);
+
+          expect(response).toSatisfyApiSpec();
+          expect(response.body.items[0]).toHaveProperty('creationTime', february);
+        });
       });
     });
 
@@ -601,6 +706,50 @@ describe('job', function () {
     });
 
     describe('Bad Path', function () {
+      it('should return 400 when a concurrent status change committed first and made the transition illegal', async function () {
+        const job = await createJobRecord(createJobRequestBody, prisma);
+
+        let releaseRow!: () => void;
+        const rowReleased = new Promise<void>((resolve) => {
+          releaseRow = resolve;
+        });
+        let signalRowHeld!: () => void;
+        const rowHeld = new Promise<void>((resolve) => {
+          signalRowHeld = resolve;
+        });
+
+        // Aborts the job in a transaction that stays open, so the request has to wait for it.
+        const concurrentAbort = prisma.$transaction(async (tx) => {
+          await tx.job.update({ where: { id: job.id }, data: { status: JobOperationStatus.ABORTED, xstate: abortedXstatePersistentSnapshot } });
+          signalRowHeld();
+          await rowReleased;
+        });
+        await rowHeld;
+
+        const responsePromise = requestSender.updateStatusV1({
+          pathParams: { jobId: job.id as JobId },
+          requestBody: { status: JobOperationStatus.ABORTED },
+        });
+        await waitForQueryBlockedOnLock(async () => {
+          const [row] = await prisma.$queryRaw<{ waiting: number }[]>`
+            SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+          return row!.waiting;
+        });
+
+        releaseRow();
+        await concurrentAbort;
+        const response = await responsePromise;
+
+        expect(response).toSatisfyApiSpec();
+        expect(response).toMatchObject({
+          status: StatusCodes.BAD_REQUEST,
+          body: {
+            message: illegalStatusTransitionErrorMessage(JobOperationStatus.ABORTED, JobOperationStatus.ABORTED),
+            code: 'ILLEGAL_JOB_STATUS_TRANSITION',
+          },
+        });
+      });
+
       it('should return 400 with detailed error for invalid status transition', async function () {
         const { job } = await createJobnikTree(
           prisma,

@@ -15,6 +15,19 @@ export type DrizzleTx = Parameters<Parameters<Drizzle['transaction']>[0]>[0];
 /** A relational query filter on the job table; keys whose value is undefined are ignored. */
 export type JobFilter = RelationsFilter<(typeof relations)['job'], typeof relations>;
 
+/**
+ * Rejects a configured `db.schema` other than the one the tables are defined in.
+ * The table definitions are bound to {@link JOB_MANAGER_SCHEMA}, so any other value would be silently ignored.
+ * @param schema - the configured database schema
+ */
+export function assertSupportedDbSchema(schema: string): void {
+  if (schema !== JOB_MANAGER_SCHEMA) {
+    throw new Error(
+      `Unsupported db.schema '${schema}': the tables live in the '${JOB_MANAGER_SCHEMA}' schema, so db.schema must be '${JOB_MANAGER_SCHEMA}'`
+    );
+  }
+}
+
 export function createDrizzle(pool: Pool): Drizzle {
   return drizzle({ client: pool, relations });
 }

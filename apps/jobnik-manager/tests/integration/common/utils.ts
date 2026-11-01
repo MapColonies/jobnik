@@ -10,6 +10,9 @@ import { createJobRecord, createJobRequestBody } from '../jobs/helpers';
 import { createStageBody, addStageRecord } from '../stages/helpers';
 import { createTaskBody, createTaskRecords } from '../tasks/helpers';
 
+const LOCK_WAIT_TIMEOUT_MS = 5000;
+const LOCK_WAIT_POLL_INTERVAL_MS = 20;
+
 type JobTestCreateModel = JobCreateModel & {
   id?: string;
   xstate?: Snapshot<unknown>;
@@ -140,6 +143,21 @@ export function createMockUnknownDbError(): Error {
   // @ts-expect-error using this flag to explicitly mark the error as NOT a Prisma error
   error.isPrismaError = false;
   return error;
+}
+
+/**
+ * Waits until at least one database query is blocked waiting for a lock, for tests that need a request to queue behind a held row.
+ * @param countBlockedQueries - returns how many queries are currently waiting for a lock
+ * @param timeoutMs - how long to wait before failing
+ */
+export async function waitForQueryBlockedOnLock(countBlockedQueries: () => Promise<number>, timeoutMs = LOCK_WAIT_TIMEOUT_MS): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while ((await countBlockedQueries()) === 0) {
+    if (Date.now() > deadline) {
+      throw new Error(`No query was blocked on a lock within ${timeoutMs}ms`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, LOCK_WAIT_POLL_INTERVAL_MS));
+  }
 }
 
 // Type definitions using inheritance - cleaner hierarchy
