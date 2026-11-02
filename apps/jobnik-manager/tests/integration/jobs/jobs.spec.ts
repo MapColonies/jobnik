@@ -1,9 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { describe, beforeEach, afterEach, it, expect, beforeAll } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
-import { jsLogger } from '@map-colonies/js-logger';
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
-import { trace } from '@opentelemetry/api';
 import { StatusCodes } from 'http-status-codes';
 import {
   createRequestSender,
@@ -12,9 +10,10 @@ import {
   type RequestSender,
 } from '@map-colonies/openapi-helpers/requestSender';
 import { openapiFilePath, type paths, type operations, type JobId } from 'jobnik-openapi';
-import { type PrismaClient } from '@prismaClient';
-import { getApp } from '@src/app';
-import { SERVICES, successMessages } from '@common/constants';
+import { eq } from 'drizzle-orm';
+import type { Drizzle } from '@src/db/drizzle';
+import { jobTable } from '@src/db/entities';
+import { successMessages } from '@common/constants';
 import { initConfig } from '@src/common/config';
 import { errorMessages as jobsErrorMessages } from '@src/jobs/models/errors';
 import { defaultStatusCounts } from '@src/stages/models/helper';
@@ -28,7 +27,7 @@ import type { JobCreateModel } from '@src/jobs/models/models';
 import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 import { JobOperationStatus, Priority, StageOperationStatus } from '@src/db/persistenceModel';
-import { createJobnikTree, endDatabasePool, truncateAllTables, waitForQueryBlockedOnLock } from '../common/utils';
+import { createJobnikTree, endDatabasePool, setupIntegrationApp, teardownIntegrationApp, waitForQueryBlockedOnLock } from '../common/utils';
 import { createJobRecord, createJobRequestBody, testJobId } from './helpers';
 
 const memoryExporter = new InMemorySpanExporter();
@@ -40,7 +39,7 @@ const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(e
 
 describe('job', function () {
   let requestSender: RequestSender<paths, operations>;
-  let prisma: PrismaClient;
+  let drizzle: Drizzle;
   let container: DependencyContainer;
 
   beforeAll(async function () {
@@ -48,23 +47,13 @@ describe('job', function () {
   });
 
   beforeEach(async function () {
-    let app;
-    [app, container] = await getApp({
-      override: [
-        { token: SERVICES.LOGGER, provider: { useValue: jsLogger({ enabled: false }) } },
-        { token: SERVICES.TRACER, provider: { useValue: trace.getTracer('testTracer') } },
-      ],
-      useChild: true,
-    });
-
-    requestSender = await createRequestSender<paths, operations>(openapiFilePath, app);
-    prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
-    await truncateAllTables(prisma);
+    const integrationApp = await setupIntegrationApp();
+    ({ container, drizzle } = integrationApp);
+    requestSender = await createRequestSender<paths, operations>(openapiFilePath, integrationApp.app);
   });
 
   afterEach(async function () {
-    await prisma.$disconnect();
-    await endDatabasePool(container);
+    await teardownIntegrationApp(container);
     memoryExporter.reset();
   });
 
@@ -72,7 +61,7 @@ describe('job', function () {
     describe('Happy Path', function () {
       it('should return 200 status code and the matching job with stages when stages flag is true', async function () {
         await createJobnikTree(
-          prisma,
+          drizzle,
           { xstate: pendingStageXstatePersistentSnapshot, status: JobOperationStatus.PENDING, traceparent: DEFAULT_TRACEPARENT },
           {
             summary: { ...defaultStatusCounts, total: 1, pending: 1 },
@@ -186,8 +175,11 @@ describe('job', function () {
         let alphaMarchId: string;
 
         const createJobAt = async (name: string, creationTime: string): Promise<string> => {
-          const job = await createJobRecord({ ...createJobRequestBody, name }, prisma);
-          await prisma.job.update({ where: { id: job.id }, data: { creationTime: new Date(creationTime) } });
+          const job = await createJobRecord({ ...createJobRequestBody, name }, drizzle);
+          await drizzle
+            .update(jobTable)
+            .set({ creationTime: new Date(creationTime) })
+            .where(eq(jobTable.id, job.id));
           return job.id;
         };
 
@@ -454,10 +446,10 @@ describe('job', function () {
   describe('#getJobById', function () {
     describe('Happy Path', function () {
       it('should return 200 status code and return the job', async function () {
-        const { job } = await createJobnikTree(prisma, { name: 'SOME_UNIQUE_NAME' }, {}, [], { createStage: true, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, { name: 'SOME_UNIQUE_NAME' }, {}, [], { createStage: true, createTasks: false });
         const jobId = job.id;
 
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId } });
 
         expect(getJobResponse).toSatisfyApiSpec();
         expect(getJobResponse).toMatchObject({ status: StatusCodes.OK, body: { status: JobOperationStatus.CREATED, name: 'SOME_UNIQUE_NAME' } });
@@ -465,14 +457,14 @@ describe('job', function () {
       });
 
       it('should return 200 status code and return the job with stages when stages flag is true', async function () {
-        const { job } = await createJobnikTree(prisma, { name: 'SOME_UNIQUE_NAME' }, { type: 'SOME_UNIQUE_TYPE' }, [], {
+        const { job } = await createJobnikTree(drizzle, { name: 'SOME_UNIQUE_NAME' }, { type: 'SOME_UNIQUE_TYPE' }, [], {
           createStage: true,
           createTasks: false,
         });
         const jobId = job.id;
 
         const getJobResponse = await requestSender.getJobByIdV1({
-          pathParams: { jobId: jobId as JobId },
+          pathParams: { jobId: jobId },
           queryParams: { should_return_stages: true },
         });
 
@@ -485,14 +477,14 @@ describe('job', function () {
       });
 
       it('should return 200 status code and return the job without stages when stages flag is false', async function () {
-        const { job } = await createJobnikTree(prisma, { name: 'SOME_UNIQUE_NAME' }, { type: 'SOME_UNIQUE_TYPE' }, [], {
+        const { job } = await createJobnikTree(drizzle, { name: 'SOME_UNIQUE_NAME' }, { type: 'SOME_UNIQUE_TYPE' }, [], {
           createStage: true,
           createTasks: false,
         });
         const jobId = job.id;
 
         const getJobResponse = await requestSender.getJobByIdV1({
-          pathParams: { jobId: jobId as JobId },
+          pathParams: { jobId: jobId },
           queryParams: { should_return_stages: false },
         });
 
@@ -540,18 +532,18 @@ describe('job', function () {
     describe('Happy Path', function () {
       it("should return 201 status code and modify job's userMetadata object", async function () {
         const userMetadataInput = { someTestKey: 'someTestData' };
-        const { job } = await createJobnikTree(prisma, { name: 'SOME_UNIQUE_NAME' }, {}, [], {
+        const { job } = await createJobnikTree(drizzle, { name: 'SOME_UNIQUE_NAME' }, {}, [], {
           createStage: true,
           createTasks: false,
         });
         const jobId = job.id;
 
         const updateUserMetadataResponse = await requestSender.updateUserMetadataV1({
-          pathParams: { jobId: jobId as JobId },
+          pathParams: { jobId: jobId },
           requestBody: userMetadataInput,
         });
 
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId } });
 
         expect(updateUserMetadataResponse).toSatisfyApiSpec();
         expect(getJobResponse.body).toMatchObject({ userMetadata: userMetadataInput });
@@ -598,32 +590,32 @@ describe('job', function () {
   describe('#updateJobPriority', function () {
     describe('Happy Path', function () {
       it("should return 201 status code and modify job's priority", async function () {
-        const { job } = await createJobnikTree(prisma, { priority: Priority.VERY_LOW }, {}, [], {
+        const { job } = await createJobnikTree(drizzle, { priority: Priority.VERY_LOW }, {}, [], {
           createStage: true,
           createTasks: false,
         });
         const jobId = job.id;
 
         const setPriorityResponse = await requestSender.updateJobPriorityV1({
-          pathParams: { jobId: jobId as JobId },
+          pathParams: { jobId: jobId },
           requestBody: { priority: Priority.VERY_HIGH },
         });
 
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId } });
 
         expect(setPriorityResponse).toSatisfyApiSpec();
         expect(getJobResponse.body).toMatchObject({ priority: Priority.VERY_HIGH });
       });
 
       it("should return 204 status code without modifying job's priority", async function () {
-        const { job } = await createJobnikTree(prisma, { priority: Priority.VERY_HIGH }, {}, [], {
+        const { job } = await createJobnikTree(drizzle, { priority: Priority.VERY_HIGH }, {}, [], {
           createStage: true,
           createTasks: false,
         });
         const jobId = job.id;
 
         const setPriorityResponse = await requestSender.updateJobPriorityV1({
-          pathParams: { jobId: jobId as JobId },
+          pathParams: { jobId: jobId },
 
           requestBody: { priority: Priority.VERY_HIGH },
         });
@@ -685,21 +677,21 @@ describe('job', function () {
   describe('#updateStatus', function () {
     describe('Happy Path', function () {
       it("should return 201 status code and modify job's status", async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], {
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], {
           createStage: true,
           createTasks: false,
         });
         const jobId = job.id;
 
         const setStatusResponse = await requestSender.updateStatusV1({
-          pathParams: { jobId: jobId as JobId },
+          pathParams: { jobId: jobId },
           requestBody: { status: JobOperationStatus.PENDING },
         });
 
         expect(setStatusResponse).toSatisfyApiSpec();
         expect(setStatusResponse).toHaveProperty('status', StatusCodes.OK);
 
-        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
+        const getJobResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId } });
 
         expect(getJobResponse).toHaveProperty('body.status', JobOperationStatus.PENDING);
       });
@@ -707,7 +699,7 @@ describe('job', function () {
 
     describe('Bad Path', function () {
       it('should return 400 when a concurrent status change committed first and made the transition illegal', async function () {
-        const job = await createJobRecord(createJobRequestBody, prisma);
+        const job = await createJobRecord(createJobRequestBody, drizzle);
 
         let releaseRow!: () => void;
         const rowReleased = new Promise<void>((resolve) => {
@@ -719,22 +711,21 @@ describe('job', function () {
         });
 
         // Aborts the job in a transaction that stays open, so the request has to wait for it.
-        const concurrentAbort = prisma.$transaction(async (tx) => {
-          await tx.job.update({ where: { id: job.id }, data: { status: JobOperationStatus.ABORTED, xstate: abortedXstatePersistentSnapshot } });
+        const concurrentAbort = drizzle.transaction(async (tx) => {
+          await tx
+            .update(jobTable)
+            .set({ status: JobOperationStatus.ABORTED, xstate: abortedXstatePersistentSnapshot })
+            .where(eq(jobTable.id, job.id));
           signalRowHeld();
           await rowReleased;
         });
         await rowHeld;
 
         const responsePromise = requestSender.updateStatusV1({
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
           requestBody: { status: JobOperationStatus.ABORTED },
         });
-        await waitForQueryBlockedOnLock(async () => {
-          const [row] = await prisma.$queryRaw<{ waiting: number }[]>`
-            SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
-          return row!.waiting;
-        });
+        await waitForQueryBlockedOnLock(drizzle);
 
         releaseRow();
         await concurrentAbort;
@@ -752,7 +743,7 @@ describe('job', function () {
 
       it('should return 400 with detailed error for invalid status transition', async function () {
         const { job } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.COMPLETED, xstate: completedStageXstatePersistentSnapshot },
           {},
           [],
@@ -764,7 +755,7 @@ describe('job', function () {
         const jobId = job.id;
 
         const setStatusResponse = await requestSender.updateStatusV1({
-          pathParams: { jobId: jobId as JobId },
+          pathParams: { jobId: jobId },
           requestBody: { status: JobOperationStatus.PAUSED },
         });
 
@@ -776,14 +767,14 @@ describe('job', function () {
       });
 
       it('should return 400 with detailed error for invalid status', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], {
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], {
           createStage: true,
           createTasks: false,
         });
         const jobId = job.id;
 
         const setStatusResponse = await requestSender.updateStatusV1({
-          pathParams: { jobId: jobId as JobId },
+          pathParams: { jobId: jobId },
           // @ts-expect-error - COMPLETED is a system-managed status and cannot be set via the user-controllable status update endpoint; this test ensures such values are rejected by the API
           requestBody: { status: JobOperationStatus.COMPLETED },
         });
@@ -835,8 +826,7 @@ describe('job', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
-        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -844,12 +834,12 @@ describe('job', function () {
   describe('#deleteJob', function () {
     describe('Happy Path', function () {
       it('should return 200 status code and delete the job with related stages', async function () {
-        const job = await createJobRecord(createJobRequestBody, prisma);
+        const job = await createJobRecord(createJobRequestBody, drizzle);
         const createdJobId = job.id;
 
-        await requestSender.updateStatusV1({ pathParams: { jobId: createdJobId as JobId }, requestBody: { status: JobOperationStatus.ABORTED } });
-        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: createdJobId as JobId } });
-        const validateDeletionResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: createdJobId as JobId } });
+        await requestSender.updateStatusV1({ pathParams: { jobId: createdJobId }, requestBody: { status: JobOperationStatus.ABORTED } });
+        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: createdJobId } });
+        const validateDeletionResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: createdJobId } });
 
         expect(deleteJobResponse).toSatisfyApiSpec();
         expect(deleteJobResponse).toMatchObject({
@@ -864,14 +854,20 @@ describe('job', function () {
       });
 
       it('should return 200 status code and delete the job only', async function () {
-        const { job } = await createJobnikTree(prisma, { status: JobOperationStatus.ABORTED, xstate: abortedStageXstatePersistentSnapshot }, {}, [], {
-          createStage: true,
-          createTasks: false,
-        });
+        const { job } = await createJobnikTree(
+          drizzle,
+          { status: JobOperationStatus.ABORTED, xstate: abortedStageXstatePersistentSnapshot },
+          {},
+          [],
+          {
+            createStage: true,
+            createTasks: false,
+          }
+        );
         const jobId = job.id;
 
-        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: jobId as JobId } });
-        const validateDeletionResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId as JobId } });
+        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: jobId } });
+        const validateDeletionResponse = await requestSender.getJobByIdV1({ pathParams: { jobId: jobId } });
 
         expect(deleteJobResponse).toSatisfyApiSpec();
         expect(deleteJobResponse).toMatchObject({
@@ -898,13 +894,19 @@ describe('job', function () {
       });
 
       it('should return status code 400 when supplying job with not final state status', async function () {
-        const { job } = await createJobnikTree(prisma, { status: JobOperationStatus.PENDING, xstate: pendingStageXstatePersistentSnapshot }, {}, [], {
-          createStage: true,
-          createTasks: false,
-        });
+        const { job } = await createJobnikTree(
+          drizzle,
+          { status: JobOperationStatus.PENDING, xstate: pendingStageXstatePersistentSnapshot },
+          {},
+          [],
+          {
+            createStage: true,
+            createTasks: false,
+          }
+        );
         const jobId = job.id;
 
-        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: jobId as JobId } });
+        const deleteJobResponse = await requestSender.deleteJobV1({ pathParams: { jobId: jobId } });
 
         expect(deleteJobResponse).toSatisfyApiSpec();
         expect(deleteJobResponse).toMatchObject({

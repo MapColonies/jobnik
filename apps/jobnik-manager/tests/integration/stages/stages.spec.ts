@@ -1,8 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { describe, beforeEach, afterEach, it, expect, beforeAll } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
-import { jsLogger } from '@map-colonies/js-logger';
-import { trace } from '@opentelemetry/api';
 import { StatusCodes } from 'http-status-codes';
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
 import {
@@ -13,9 +11,9 @@ import {
 } from '@map-colonies/openapi-helpers/requestSender';
 import { faker } from '@faker-js/faker';
 import { openapiFilePath, type paths, type operations, type JobId, type StageId } from 'jobnik-openapi';
-import { type PrismaClient } from '@prismaClient';
-import { getApp } from '@src/app';
-import { SERVICES } from '@common/constants';
+import { eq } from 'drizzle-orm';
+import type { Drizzle } from '@src/db/drizzle';
+import { jobTable, stageTable } from '@src/db/entities';
 import { initConfig } from '@src/common/config';
 import { errorMessages as jobsErrorMessages } from '@src/jobs/models/errors';
 import type { StageCreateModel, StageModel, StagesPaginatedResponse } from '@src/stages/models/models';
@@ -33,14 +31,14 @@ import { DEFAULT_TRACEPARENT } from '@src/common/utils/tracingHelpers';
 import { illegalStatusTransitionErrorMessage } from '@src/common/errors';
 import { JobOperationStatus, StageOperationStatus, TaskOperationStatus } from '@src/db/persistenceModel';
 import { createJobRecord, createJobRequestBody, testJobId, testStageId } from '../jobs/helpers';
-import { createJobnikTree, endDatabasePool, truncateAllTables, waitForQueryBlockedOnLock } from '../common/utils';
+import { createJobnikTree, endDatabasePool, setupIntegrationApp, teardownIntegrationApp, waitForQueryBlockedOnLock } from '../common/utils';
 import { addStageRecord, createStageBody } from './helpers';
 
 const expectResponseStatus: ExpectResponseStatus = expectResponseStatusFactory(expect);
 
 describe('stage', function () {
   let requestSender: RequestSender<paths, operations>;
-  let prisma: PrismaClient;
+  let drizzle: Drizzle;
   let container: DependencyContainer;
 
   const memoryExporter = new InMemorySpanExporter();
@@ -55,36 +53,26 @@ describe('stage', function () {
   });
 
   beforeEach(async function () {
-    let app;
-    [app, container] = await getApp({
-      override: [
-        { token: SERVICES.LOGGER, provider: { useValue: jsLogger({ enabled: false }) } },
-        { token: SERVICES.TRACER, provider: { useValue: trace.getTracer('testTracer') } },
-      ],
-      useChild: true,
-    });
-
-    requestSender = await createRequestSender<paths, operations>(openapiFilePath, app);
-    prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
-    await truncateAllTables(prisma);
+    const integrationApp = await setupIntegrationApp();
+    ({ container, drizzle } = integrationApp);
+    requestSender = await createRequestSender<paths, operations>(openapiFilePath, integrationApp.app);
   });
 
   afterEach(async function () {
-    await prisma.$disconnect();
-    await endDatabasePool(container);
+    await teardownIntegrationApp(container);
     memoryExporter.reset();
   });
 
   describe('#getStages', function () {
     describe('Happy Path', function () {
       it('should return 200 status code and the matching stage', async function () {
-        const { job } = await createJobnikTree(prisma, {}, { type: 'SOME_STAGE_TYPE', data: { avi: 'is the best' } }, [], {
+        const { job } = await createJobnikTree(drizzle, {}, { type: 'SOME_STAGE_TYPE', data: { avi: 'is the best' } }, [], {
           createStage: true,
           createTasks: false,
         });
         const jobId = job.id;
 
-        const response = await requestSender.getStagesV1({ queryParams: { job_id: jobId as JobId } });
+        const response = await requestSender.getStagesV1({ queryParams: { job_id: jobId } });
 
         expect(response).toMatchObject({
           status: StatusCodes.OK,
@@ -114,7 +102,7 @@ describe('stage', function () {
       });
 
       it('should return 200 status code and all the stages if no query params were defined', async function () {
-        await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
 
         const response = await requestSender.getStagesV1();
 
@@ -128,8 +116,8 @@ describe('stage', function () {
       });
 
       it('should return 200 with total and items when paginating', async function () {
-        await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
-        await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
+        await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
 
         const response = await requestSender.getStagesV1({ queryParams: { page: 1, page_size: 1 } });
 
@@ -144,7 +132,7 @@ describe('stage', function () {
       });
 
       it('should return 200 with empty items array when page is beyond total', async function () {
-        await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
 
         const response = await requestSender.getStagesV1({ queryParams: { page: 9999, page_size: 10 } });
 
@@ -159,7 +147,7 @@ describe('stage', function () {
 
       it('should return 200 status code and the matching stage with related tasks', async function () {
         const { job, stage, tasks } = await createJobnikTree(
-          prisma,
+          drizzle,
           { xstate: pendingStageXstatePersistentSnapshot, status: JobOperationStatus.PENDING, traceparent: DEFAULT_TRACEPARENT },
           {
             status: StageOperationStatus.PENDING,
@@ -171,7 +159,7 @@ describe('stage', function () {
 
         const jobId = job.id;
 
-        const response = await requestSender.getStagesV1({ queryParams: { job_id: jobId as JobId, should_return_tasks: true } });
+        const response = await requestSender.getStagesV1({ queryParams: { job_id: jobId, should_return_tasks: true } });
 
         expect(response).toSatisfyApiSpec();
         expect(response).toMatchObject({
@@ -189,7 +177,7 @@ describe('stage', function () {
 
       it('should return 200 status code and the matching stage without related tasks', async function () {
         const { job, stage } = await createJobnikTree(
-          prisma,
+          drizzle,
           {},
           {
             status: StageOperationStatus.PENDING,
@@ -199,7 +187,7 @@ describe('stage', function () {
           [{}]
         );
 
-        const response = await requestSender.getStagesV1({ queryParams: { job_id: job.id as JobId, should_return_tasks: false } });
+        const response = await requestSender.getStagesV1({ queryParams: { job_id: job.id, should_return_tasks: false } });
 
         expectResponseStatus(response, 200);
 
@@ -226,13 +214,13 @@ describe('stage', function () {
         let jobBExportPendingId: string;
 
         const createStageFor = async (jobId: string, type: string, status: StageOperationStatus, order: number): Promise<string> => {
-          const stage = await addStageRecord({ ...createStageBody, jobId, type, status, order }, prisma);
+          const stage = await addStageRecord({ ...createStageBody, jobId: jobId as JobId, type, status, order }, drizzle);
           return stage.id;
         };
 
         beforeEach(async function () {
-          jobAId = (await createJobRecord(createJobRequestBody, prisma)).id;
-          jobBId = (await createJobRecord(createJobRequestBody, prisma)).id;
+          jobAId = (await createJobRecord(createJobRequestBody, drizzle)).id;
+          jobBId = (await createJobRecord(createJobRequestBody, drizzle)).id;
           jobATilingPendingId = await createStageFor(jobAId, 'tiling', StageOperationStatus.PENDING, 1);
           jobAExportCreatedId = await createStageFor(jobAId, 'export', StageOperationStatus.CREATED, 2);
           jobBTilingCreatedId = await createStageFor(jobBId, 'tiling', StageOperationStatus.CREATED, 1);
@@ -327,7 +315,7 @@ describe('stage', function () {
     describe('Happy Path', function () {
       it('should return 200 status code and return the stage', async function () {
         const { stage } = await createJobnikTree(
-          prisma,
+          drizzle,
           {},
           {
             type: 'SOME_HAPPY_PATH_STAGE_TYPE',
@@ -336,7 +324,7 @@ describe('stage', function () {
         );
 
         const getStageResponse = await requestSender.getStageByIdV1({
-          pathParams: { stageId: stage.id as StageId },
+          pathParams: { stageId: stage.id },
           queryParams: { should_return_tasks: undefined },
         });
 
@@ -349,12 +337,12 @@ describe('stage', function () {
       });
 
       it('should return 200 status code and return the stage with related tasks', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [
           { status: TaskOperationStatus.COMPLETED, xstate: completedStageXstatePersistentSnapshot, userMetadata: { some: 'metadata' } },
         ]);
 
         const getStageResponse = await requestSender.getStageByIdV1({
-          pathParams: { stageId: stage.id as StageId },
+          pathParams: { stageId: stage.id },
           queryParams: { should_return_tasks: true },
         });
 
@@ -365,12 +353,12 @@ describe('stage', function () {
       });
 
       it('should return 200 status code and return the stage without related tasks', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [
           { status: TaskOperationStatus.COMPLETED, xstate: completedStageXstatePersistentSnapshot, userMetadata: { some: 'metadata' } },
         ]);
 
         const getStageResponse = await requestSender.getStageByIdV1({
-          pathParams: { stageId: stage.id as StageId },
+          pathParams: { stageId: stage.id },
           queryParams: { should_return_tasks: false },
         });
 
@@ -417,9 +405,9 @@ describe('stage', function () {
   describe('#getStagesByJobId', function () {
     describe('Happy Path', function () {
       it('should return 200 status code and return the stages', async function () {
-        const { stage, job } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage, job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
 
-        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: job.id as JobId } });
+        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: job.id } });
 
         expectResponseStatus(getStageResponse, 200);
 
@@ -429,12 +417,12 @@ describe('stage', function () {
       });
 
       it('should return 200 status code and return the stages with related tasks', async function () {
-        const { stage, job } = await createJobnikTree(prisma, {}, {}, [
+        const { stage, job } = await createJobnikTree(drizzle, {}, {}, [
           { status: TaskOperationStatus.COMPLETED, xstate: completedStageXstatePersistentSnapshot },
         ]);
 
         const getStageResponse = await requestSender.getStagesByJobIdV1({
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
           queryParams: { should_return_tasks: true },
         });
 
@@ -447,12 +435,12 @@ describe('stage', function () {
       });
 
       it('should return 200 status code and return the stages without related tasks', async function () {
-        const { stage, job } = await createJobnikTree(prisma, {}, {}, [
+        const { stage, job } = await createJobnikTree(drizzle, {}, {}, [
           { status: TaskOperationStatus.COMPLETED, xstate: completedStageXstatePersistentSnapshot },
         ]);
 
         const getStageResponse = await requestSender.getStagesByJobIdV1({
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
           queryParams: { should_return_tasks: false },
         });
 
@@ -464,9 +452,9 @@ describe('stage', function () {
       });
 
       it('should return a 200 status code with empty array object if no stages exists for the requested job', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
-        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: job.id as JobId } });
+        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: job.id } });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({
@@ -476,12 +464,12 @@ describe('stage', function () {
       });
 
       it('should return stages ordered by the order field', async function () {
-        const job = await createJobRecord(createJobRequestBody, prisma);
+        const job = await createJobRecord(createJobRequestBody, drizzle);
         const createdJobId = job.id;
 
         // Create multiple stages for the same job using API endpoints to ensure proper order assignment
         await requestSender.addStageV1({
-          pathParams: { jobId: createdJobId as JobId },
+          pathParams: { jobId: createdJobId },
           requestBody: {
             type: 'FIRST_STAGE',
             data: {},
@@ -490,7 +478,7 @@ describe('stage', function () {
         });
 
         await requestSender.addStageV1({
-          pathParams: { jobId: createdJobId as JobId },
+          pathParams: { jobId: createdJobId },
           requestBody: {
             type: 'SECOND_STAGE',
             data: {},
@@ -499,7 +487,7 @@ describe('stage', function () {
         });
 
         await requestSender.addStageV1({
-          pathParams: { jobId: createdJobId as JobId },
+          pathParams: { jobId: createdJobId },
           requestBody: {
             type: 'THIRD_STAGE',
             data: {},
@@ -507,7 +495,7 @@ describe('stage', function () {
           },
         });
 
-        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: createdJobId as JobId } });
+        const getStageResponse = await requestSender.getStagesByJobIdV1({ pathParams: { jobId: createdJobId } });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({
@@ -558,9 +546,9 @@ describe('stage', function () {
   describe('#getSummary', function () {
     describe('Happy Path', function () {
       it("should return 200 status code and return the stage's summary", async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
 
-        const getStageResponse = await requestSender.getStageSummaryV1({ pathParams: { stageId: stage.id as StageId } });
+        const getStageResponse = await requestSender.getStageSummaryV1({ pathParams: { stageId: stage.id } });
 
         expect(getStageResponse).toSatisfyApiSpec();
         expect(getStageResponse).toMatchObject({ status: StatusCodes.OK, body: defaultStatusCounts });
@@ -606,14 +594,14 @@ describe('stage', function () {
       it("should return 201 status code and modify stages's userMetadata object", async function () {
         const userMetadataInput = { someTestKey: 'someTestData' };
 
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
 
         const updateUserMetadataResponse = await requestSender.updateStageUserMetadataV1({
-          pathParams: { stageId: stage.id as StageId },
+          pathParams: { stageId: stage.id },
           requestBody: userMetadataInput,
         });
 
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id as StageId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id } });
 
         expect(updateUserMetadataResponse).toSatisfyApiSpec();
         expect(getStageResponse.body).toMatchObject({ userMetadata: userMetadataInput });
@@ -635,10 +623,10 @@ describe('stage', function () {
       });
 
       it('should return a 400 status code and a message indicating the request body has an invalid structure', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
 
         const response = await requestSender.updateStageUserMetadataV1({
-          pathParams: { stageId: stage.id as StageId },
+          pathParams: { stageId: stage.id },
           requestBody: 'badInputString' as unknown as { [key: string]: string },
         });
 
@@ -665,7 +653,7 @@ describe('stage', function () {
   describe('#addStage', function () {
     describe('Happy Path', function () {
       it('should return 200 status code and create the related stage for current job', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         const createStagesPayload = {
           data: {},
@@ -675,7 +663,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -686,7 +674,7 @@ describe('stage', function () {
       });
 
       it('should give the next order to a stage added while another stage is being added to the same job', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         let releaseJob!: () => void;
         const jobReleased = new Promise<void>((resolve) => {
@@ -698,9 +686,9 @@ describe('stage', function () {
         });
 
         // Adds the first stage the way addStage does, in a transaction that stays open, so the request has to wait for it.
-        const concurrentAddStage = prisma.$transaction(async (tx) => {
-          await tx.$executeRaw`SELECT 1 FROM job_manager.job WHERE id = ${job.id}::uuid FOR NO KEY UPDATE`;
-          await tx.stage.create({ data: { ...createStageBody, jobId: job.id, order: 1 } });
+        const concurrentAddStage = drizzle.transaction(async (tx) => {
+          await tx.select().from(jobTable).where(eq(jobTable.id, job.id)).for('no key update');
+          await tx.insert(stageTable).values({ ...createStageBody, jobId: job.id, order: 1 });
           signalJobHeld();
           await jobReleased;
         });
@@ -708,13 +696,9 @@ describe('stage', function () {
 
         const responsePromise = requestSender.addStageV1({
           requestBody: { data: {}, type: 'SECOND_STAGE', userMetadata: {} },
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
-        await waitForQueryBlockedOnLock(async () => {
-          const [row] = await prisma.$queryRaw<{ waiting: number }[]>`
-            SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
-          return row!.waiting;
-        });
+        await waitForQueryBlockedOnLock(drizzle);
 
         releaseJob();
         await concurrentAddStage;
@@ -725,7 +709,7 @@ describe('stage', function () {
       });
 
       it('should create a stage with WAITING status when startAsWaiting flag is true', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         const createStagesPayload = {
           data: {},
@@ -736,7 +720,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -747,7 +731,7 @@ describe('stage', function () {
       });
 
       it('should create a stage with PENDING status when startAsWaiting flag is false', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         const createStagesPayload = {
           data: {},
@@ -758,7 +742,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -769,7 +753,7 @@ describe('stage', function () {
       });
 
       it('should create a stage with CREATED status when not the first stage', async function () {
-        const { job } = await createJobnikTree(prisma, {}, { type: 'SOME_STAGE_TYPE', data: { avi: 'is the best' } }, [], {
+        const { job } = await createJobnikTree(drizzle, {}, { type: 'SOME_STAGE_TYPE', data: { avi: 'is the best' } }, [], {
           createStage: true,
           createTasks: false,
         });
@@ -783,7 +767,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -794,7 +778,7 @@ describe('stage', function () {
       });
 
       it('should create the first stage successfully', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         const createStagePayload = {
           data: { testData: 'first stage' },
@@ -804,7 +788,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagePayload,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -819,7 +803,7 @@ describe('stage', function () {
       });
 
       it('should create multiple stages successfully for the same job', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         // Create first stage
         const stage1Payload = {
@@ -830,7 +814,7 @@ describe('stage', function () {
 
         const stage1Response = await requestSender.addStageV1({
           requestBody: stage1Payload,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(stage1Response).toMatchObject({
@@ -849,7 +833,7 @@ describe('stage', function () {
 
         const stage2Response = await requestSender.addStageV1({
           requestBody: stage2Payload,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(stage2Response).toMatchObject({
@@ -868,7 +852,7 @@ describe('stage', function () {
 
         const stage3Response = await requestSender.addStageV1({
           requestBody: stage3Payload,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(stage3Response).toMatchObject({
@@ -880,8 +864,8 @@ describe('stage', function () {
       });
 
       it('should create stages independently for different jobs', async function () {
-        const { job: job1 } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
-        const { job: job2 } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job: job1 } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
+        const { job: job2 } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         // Add two stages to job1
         const job1Stage1Payload = {
@@ -906,17 +890,17 @@ describe('stage', function () {
         // Create stages
         const job1Stage1Response = await requestSender.addStageV1({
           requestBody: job1Stage1Payload,
-          pathParams: { jobId: job1.id as JobId },
+          pathParams: { jobId: job1.id },
         });
 
         const job1Stage2Response = await requestSender.addStageV1({
           requestBody: job1Stage2Payload,
-          pathParams: { jobId: job1.id as JobId },
+          pathParams: { jobId: job1.id },
         });
 
         const job2Stage1Response = await requestSender.addStageV1({
           requestBody: job2Stage1Payload,
-          pathParams: { jobId: job2.id as JobId },
+          pathParams: { jobId: job2.id },
         });
 
         expect(job1Stage1Response).toMatchObject({
@@ -942,7 +926,7 @@ describe('stage', function () {
       });
 
       it('should return stages in correct sequence when fetching by job id', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         // Create multiple stages
         const stages = [
@@ -957,13 +941,13 @@ describe('stage', function () {
               ...stageData,
               userMetadata: {},
             } satisfies StageCreateModel,
-            pathParams: { jobId: job.id as JobId },
+            pathParams: { jobId: job.id },
           });
         }
 
         // Fetch all stages for the job
         const getStagesResponse = await requestSender.getStagesByJobIdV1({
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(getStagesResponse).toMatchObject({
@@ -973,7 +957,7 @@ describe('stage', function () {
       });
 
       it('should return 201 status code and add the stage with generated traceparent from active span', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         const createStagesPayload = {
           data: {},
@@ -983,7 +967,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         await memoryExporter.forceFlush();
@@ -998,7 +982,7 @@ describe('stage', function () {
       });
 
       it('should return 201 status code and add the stage with provided traceparent and tracestate', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         const createStagesPayload = {
           data: {},
@@ -1010,7 +994,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -1025,7 +1009,7 @@ describe('stage', function () {
       });
 
       it('should return 201 status code and add the stage with provided traceparent without tracestate', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         const createStagesPayload = {
           data: {},
@@ -1036,7 +1020,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -1054,7 +1038,7 @@ describe('stage', function () {
 
     describe('Bad Path', function () {
       it('should return status code 400 when supplying bad uuid as part of the request', async function () {
-        await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: {
@@ -1072,10 +1056,10 @@ describe('stage', function () {
       });
 
       it('should return 400 when the request contains an incorrect body', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         const addStageResponse = await requestSender.addStageV1({
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
           requestBody: {} as unknown as StageCreateModel,
         });
 
@@ -1086,14 +1070,14 @@ describe('stage', function () {
       });
 
       it('should return 400 when attempting to add stage to a finalized job', async function () {
-        const { job } = await createJobnikTree(prisma, { xstate: abortedXstatePersistentSnapshot, status: JobOperationStatus.ABORTED }, {}, [], {
+        const { job } = await createJobnikTree(drizzle, { xstate: abortedXstatePersistentSnapshot, status: JobOperationStatus.ABORTED }, {}, [], {
           createStage: false,
           createTasks: false,
         });
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: { data: {}, userMetadata: {}, type: 'SOME_STAGE_TYPE' } satisfies StageCreateModel,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -1104,7 +1088,7 @@ describe('stage', function () {
       });
 
       it('should return 400 when the request contains an invalid traceparent format', async function () {
-        const { job } = await createJobnikTree(prisma, {}, {}, [], { createStage: false, createTasks: false });
+        const { job } = await createJobnikTree(drizzle, {}, {}, [], { createStage: false, createTasks: false });
 
         const createStagesPayload = {
           data: {},
@@ -1115,7 +1099,7 @@ describe('stage', function () {
 
         const addStageResponse = await requestSender.addStageV1({
           requestBody: createStagesPayload,
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
         });
 
         expect(addStageResponse).toSatisfyApiSpec();
@@ -1155,8 +1139,7 @@ describe('stage', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
-        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });
@@ -1164,25 +1147,25 @@ describe('stage', function () {
   describe('#updateStatus', function () {
     describe('Happy Path', function () {
       it("should return 200 status code and modify stages's status", async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
 
         const setStatusResponse = await requestSender.updateStageStatusV1({
-          pathParams: { stageId: stage.id as StageId },
+          pathParams: { stageId: stage.id },
           requestBody: { status: StageOperationStatus.PENDING },
         });
 
         expect(setStatusResponse).toSatisfyApiSpec();
         expect(setStatusResponse).toHaveProperty('status', StatusCodes.OK);
 
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id as StageId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage.id } });
 
         expect(getStageResponse).toHaveProperty('body.status', StageOperationStatus.PENDING);
       });
 
       it("should return 201 status code and modify stages's status by order (stage is first ordered before other)", async function () {
-        const { stage: stage1 } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage: stage1 } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
         const secondStageResponse = await requestSender.addStageV1({
-          pathParams: { jobId: stage1.jobId as JobId },
+          pathParams: { jobId: stage1.jobId },
           requestBody: { type: 'SECOND_STAGE', data: {}, userMetadata: {} },
         });
 
@@ -1193,28 +1176,28 @@ describe('stage', function () {
         expect(stage2).toHaveProperty('order', 2);
 
         const setStatusResponse = await requestSender.updateStageStatusV1({
-          pathParams: { stageId: stage1.id as StageId },
+          pathParams: { stageId: stage1.id },
           requestBody: { status: StageOperationStatus.PENDING },
         });
 
         expect(setStatusResponse).toSatisfyApiSpec();
         expect(setStatusResponse).toHaveProperty('status', StatusCodes.OK);
 
-        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage1.id as StageId } });
+        const getStageResponse = await requestSender.getStageByIdV1({ pathParams: { stageId: stage1.id } });
 
         expect(getStageResponse).toHaveProperty('body.status', StageOperationStatus.PENDING);
       });
 
       it('should return 200 status code and move a later stage to PENDING when the previous stage is COMPLETED', async function () {
         const { job } = await createJobnikTree(
-          prisma,
+          drizzle,
           {},
           { status: StageOperationStatus.COMPLETED, xstate: completedStageXstatePersistentSnapshot, order: 1 },
           [],
           { createStage: true, createTasks: false }
         );
         const secondStageResponse = await requestSender.addStageV1({
-          pathParams: { jobId: job.id as JobId },
+          pathParams: { jobId: job.id },
           requestBody: { type: 'SECOND_STAGE', data: {}, userMetadata: {} },
         });
         const stage2 = secondStageResponse.body as StageModel;
@@ -1254,7 +1237,7 @@ describe('stage', function () {
           fromXstate: inProgressStageXstatePersistentSnapshot,
         },
       ])('should return 400 with detailed error for invalid status transition ($fromStatus -> PENDING)', async function ({ fromStatus, fromXstate }) {
-        const { stage } = await createJobnikTree(prisma, {}, { status: fromStatus, xstate: fromXstate }, [], {
+        const { stage } = await createJobnikTree(drizzle, {}, { status: fromStatus, xstate: fromXstate }, [], {
           createStage: true,
           createTasks: false,
         });
@@ -1262,7 +1245,7 @@ describe('stage', function () {
         const stageId = stage.id;
 
         const updateStageResponse = await requestSender.updateStageStatusV1({
-          pathParams: { stageId: stageId as StageId },
+          pathParams: { stageId: stageId },
           requestBody: { status: StageOperationStatus.PENDING },
         });
 
@@ -1277,12 +1260,12 @@ describe('stage', function () {
       });
 
       it('should return 400 with detailed error for invalid status', async function () {
-        const { stage } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
 
         const stageId = stage.id;
 
         const updateStageResponse = await requestSender.updateStageStatusV1({
-          pathParams: { stageId: stageId as StageId },
+          pathParams: { stageId: stageId },
           requestBody: { status: StageOperationStatus.COMPLETED as unknown as 'PENDING' },
         });
 
@@ -1297,10 +1280,10 @@ describe('stage', function () {
       });
 
       it('should return 400 with detailed error for invalid status transition (not ordered stage - CREATED -> PENDING)', async function () {
-        const { stage: stage1 } = await createJobnikTree(prisma, {}, {}, [], { createStage: true, createTasks: false });
+        const { stage: stage1 } = await createJobnikTree(drizzle, {}, {}, [], { createStage: true, createTasks: false });
 
         const secondStageResponse = await requestSender.addStageV1({
-          pathParams: { jobId: stage1.jobId as JobId },
+          pathParams: { jobId: stage1.jobId },
           requestBody: { type: 'SECOND_STAGE', data: {}, userMetadata: {} },
         });
 
@@ -1323,10 +1306,10 @@ describe('stage', function () {
 
       it('should return 500 with a clear message when the previous stage is missing from the job', async function () {
         // A job whose only stage has order 2, so the stage it waits for doesn't exist.
-        const { stage } = await createJobnikTree(prisma, {}, { order: 2 }, [], { createStage: true, createTasks: false });
+        const { stage } = await createJobnikTree(drizzle, {}, { order: 2 }, [], { createStage: true, createTasks: false });
 
         const updateStageResponse = await requestSender.updateStageStatusV1({
-          pathParams: { stageId: stage.id as StageId },
+          pathParams: { stageId: stage.id },
           requestBody: { status: StageOperationStatus.PENDING },
         });
 
@@ -1364,8 +1347,7 @@ describe('stage', function () {
         });
 
         expect(response).toSatisfyApiSpec();
-        // The transaction fails to check out a connection, which the driver reports as a plain error rather than a query error.
-        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR });
+        expect(response).toMatchObject({ status: StatusCodes.INTERNAL_SERVER_ERROR, body: { code: 'DATABASE_RELATED_ERROR' } });
       });
     });
   });

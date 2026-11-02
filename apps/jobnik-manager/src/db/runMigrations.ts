@@ -11,7 +11,8 @@ async function main(): Promise<void> {
 
   const pool = await initConnection(config.get('db'));
   try {
-    await runMigrations(createDrizzle(pool));
+    // Migrations may legitimately run longer than a request transaction, so they are not bounded by the transaction timeout.
+    await runMigrations(createDrizzle(pool, { transactionTimeoutMs: 0 }));
     logger.info({ msg: 'migrations completed' });
   } finally {
     await pool.end();

@@ -1,23 +1,19 @@
 import { describe, beforeEach, afterEach, it, expect, beforeAll, vi } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
-import { jsLogger } from '@map-colonies/js-logger';
-import { trace } from '@opentelemetry/api';
 import { addMinutes, subMinutes } from 'date-fns';
 import type { StageId } from 'jobnik-openapi';
 import { DrizzleQueryError } from 'drizzle-orm';
-import { type PrismaClient } from '@prismaClient';
-import { getApp } from '@src/app';
-import { SERVICES } from '@common/constants';
+import type { Drizzle } from '@src/db/drizzle';
 import { getConfig, initConfig } from '@src/common/config';
 import { inProgressStageXstatePersistentSnapshot } from '@tests/unit/data';
 import { defaultStatusCounts } from '@src/stages/models/helper';
 import { TaskManager } from '@src/tasks/models/manager';
 import { TaskRepository } from '@src/tasks/DAL/taskRepository';
 import { TaskOperationStatus, StageOperationStatus, JobOperationStatus } from '@src/db/persistenceModel';
-import { createJobnikTree, endDatabasePool, truncateAllTables } from '../common/utils';
+import { createJobnikTree, endDatabasePool, setupIntegrationApp, teardownIntegrationApp } from '../common/utils';
 
 describe('TaskSweeper', () => {
-  let prisma: PrismaClient;
+  let drizzle: Drizzle;
   let container: DependencyContainer;
   let taskManager: TaskManager;
 
@@ -26,30 +22,21 @@ describe('TaskSweeper', () => {
   });
 
   beforeEach(async function () {
-    [, container] = await getApp({
-      override: [
-        { token: SERVICES.LOGGER, provider: { useValue: jsLogger({ enabled: false }) } },
-        { token: SERVICES.TRACER, provider: { useValue: trace.getTracer('testTracer') } },
-      ],
-      useChild: true,
-    });
+    ({ container, drizzle } = await setupIntegrationApp());
 
-    prisma = container.resolve<PrismaClient>(SERVICES.PRISMA);
     taskManager = container.resolve(TaskManager);
-    await truncateAllTables(prisma);
   });
 
   afterEach(async function () {
-    await prisma.$disconnect();
     vi.restoreAllMocks();
-    await endDatabasePool(container);
+    await teardownIntegrationApp(container);
     vi.resetModules();
   });
 
   describe('#cleanStaleTasks', function () {
     const createStageWithStaleTasks = async (taskCount: number) =>
       createJobnikTree(
-        prisma,
+        drizzle,
         { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
         {
           status: StageOperationStatus.IN_PROGRESS,
@@ -67,7 +54,7 @@ describe('TaskSweeper', () => {
       );
 
     const getTaskStatuses = async (stageId: StageId): Promise<TaskOperationStatus[]> => {
-      const tasks = await prisma.task.findMany({ where: { stageId }, select: { status: true } });
+      const tasks = await drizzle.query.task.findMany({ where: { stageId: { eq: stageId } }, columns: { status: true } });
       return tasks.map((task) => task.status).sort();
     };
 
@@ -87,7 +74,7 @@ describe('TaskSweeper', () => {
       it('should clean stale tasks and update stage summaries correctly', async function () {
         // Create job tree with stale tasks that have maxAttempts: 1 so they go directly to FAILED
         const { stage } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -114,9 +101,9 @@ describe('TaskSweeper', () => {
         );
 
         // Verify initial state
-        const initialTasks = await prisma.task.findMany({
-          where: { stageId: stage.id },
-          select: { id: true, status: true, startTime: true, maxAttempts: true, attempts: true },
+        const initialTasks = await drizzle.query.task.findMany({
+          where: { stageId: { eq: stage.id } },
+          columns: { id: true, status: true, startTime: true, maxAttempts: true, attempts: true },
         });
 
         expect(initialTasks).toSatisfyAll((t: (typeof initialTasks)[0]) => t.status === TaskOperationStatus.IN_PROGRESS);
@@ -125,17 +112,17 @@ describe('TaskSweeper', () => {
         await expect(taskManager.cleanStaleTasks()).toResolve();
 
         // // Verify tasks were updated to FAILED
-        const updatedTasks = await prisma.task.findMany({
-          where: { stageId: stage.id },
-          select: { id: true, status: true, startTime: true, attempts: true, maxAttempts: true },
+        const updatedTasks = await drizzle.query.task.findMany({
+          where: { stageId: { eq: stage.id } },
+          columns: { id: true, status: true, startTime: true, attempts: true, maxAttempts: true },
         });
 
         expect(updatedTasks).toSatisfyAll((t: (typeof updatedTasks)[0]) => t.status === TaskOperationStatus.FAILED);
 
         // Verify stage summary was updated
-        const updatedStage = await prisma.stage.findUnique({
-          where: { id: stage.id },
-          select: { summary: true, status: true },
+        const updatedStage = await drizzle.query.stage.findFirst({
+          where: { id: { eq: stage.id } },
+          columns: { summary: true, status: true },
         });
 
         // Verify stage reflects failed tasks
@@ -152,7 +139,7 @@ describe('TaskSweeper', () => {
       it('should not clean stale tasks when startTime less than period threshold', async function () {
         // Create job tree with stale tasks that have maxAttempts: 1 so they go directly to FAILED
         const { stage } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -172,9 +159,9 @@ describe('TaskSweeper', () => {
         );
 
         // // Verify initial state
-        const initialTasks = await prisma.task.findMany({
-          where: { stageId: stage.id },
-          select: { id: true, status: true, startTime: true, maxAttempts: true, attempts: true },
+        const initialTasks = await drizzle.query.task.findMany({
+          where: { stageId: { eq: stage.id } },
+          columns: { id: true, status: true, startTime: true, maxAttempts: true, attempts: true },
         });
 
         expect(initialTasks).toSatisfyAll((t: (typeof initialTasks)[0]) => t.status === TaskOperationStatus.IN_PROGRESS);
@@ -183,17 +170,17 @@ describe('TaskSweeper', () => {
         await expect(taskManager.cleanStaleTasks()).toResolve();
 
         // // Verify tasks were updated to FAILED
-        const updatedTasks = await prisma.task.findMany({
-          where: { stageId: stage.id },
-          select: { id: true, status: true, startTime: true, attempts: true, maxAttempts: true },
+        const updatedTasks = await drizzle.query.task.findMany({
+          where: { stageId: { eq: stage.id } },
+          columns: { id: true, status: true, startTime: true, attempts: true, maxAttempts: true },
         });
 
         expect(updatedTasks).toSatisfyAll((t: (typeof updatedTasks)[0]) => t.status === TaskOperationStatus.IN_PROGRESS);
 
         // Verify stage summary was updated
-        const updatedStage = await prisma.stage.findUnique({
-          where: { id: stage.id },
-          select: { summary: true },
+        const updatedStage = await drizzle.query.stage.findFirst({
+          where: { id: { eq: stage.id } },
+          columns: { summary: true },
         });
 
         expect(updatedStage?.summary).toMatchObject({
@@ -206,7 +193,7 @@ describe('TaskSweeper', () => {
       it('should clean only tasks that started before the configured threshold', async function () {
         const thresholdInMinutes = getConfig().get('task.staleTaskThresholdInMinutes');
         const { stage } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -231,12 +218,18 @@ describe('TaskSweeper', () => {
             },
           ]
         );
-        const [staleTask, freshTask] = await prisma.task.findMany({ where: { stageId: stage.id }, orderBy: { startTime: 'asc' } });
+        const [staleTask, freshTask] = await drizzle.query.task.findMany({ where: { stageId: { eq: stage.id } }, orderBy: { startTime: 'asc' } });
 
         await expect(taskManager.cleanStaleTasks()).toResolve();
 
-        await expect(prisma.task.findUnique({ where: { id: staleTask!.id } })).resolves.toHaveProperty('status', TaskOperationStatus.FAILED);
-        await expect(prisma.task.findUnique({ where: { id: freshTask!.id } })).resolves.toHaveProperty('status', TaskOperationStatus.IN_PROGRESS);
+        await expect(drizzle.query.task.findFirst({ where: { id: { eq: staleTask!.id } } })).resolves.toHaveProperty(
+          'status',
+          TaskOperationStatus.FAILED
+        );
+        await expect(drizzle.query.task.findFirst({ where: { id: { eq: freshTask!.id } } })).resolves.toHaveProperty(
+          'status',
+          TaskOperationStatus.IN_PROGRESS
+        );
       });
 
       it('should handle empty database gracefully', async function () {
@@ -246,7 +239,7 @@ describe('TaskSweeper', () => {
       it('should move tasks to RETRIED status when they have remaining attempts', async function () {
         // Create job tree with stale tasks that have maxAttempts > 1 so they go to RETRIED
         const { stage } = await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -269,9 +262,9 @@ describe('TaskSweeper', () => {
         await expect(taskManager.cleanStaleTasks()).toResolve();
 
         // Verify task was moved to RETRIED
-        const updatedTasks = await prisma.task.findMany({
-          where: { stageId: stage.id },
-          select: { id: true, status: true, attempts: true, maxAttempts: true },
+        const updatedTasks = await drizzle.query.task.findMany({
+          where: { stageId: { eq: stage.id } },
+          columns: { id: true, status: true, attempts: true, maxAttempts: true },
         });
 
         expect(updatedTasks[0]).toMatchObject({
@@ -284,7 +277,7 @@ describe('TaskSweeper', () => {
       it('should log debug messages when successfully updating stale task status', async function () {
         // Create job tree with stale tasks that have maxAttempts: 1 so they go directly to FAILED
         await createJobnikTree(
-          prisma,
+          drizzle,
           { status: JobOperationStatus.IN_PROGRESS, xstate: inProgressStageXstatePersistentSnapshot },
           {
             status: StageOperationStatus.IN_PROGRESS,
@@ -320,7 +313,7 @@ describe('TaskSweeper', () => {
 
         await expect(taskManager.cleanStaleTasks()).toResolve();
 
-        await expect(getTaskStatuses(stage.id as StageId)).resolves.toEqual([TaskOperationStatus.FAILED, TaskOperationStatus.IN_PROGRESS].sort());
+        await expect(getTaskStatuses(stage.id)).resolves.toEqual([TaskOperationStatus.FAILED, TaskOperationStatus.IN_PROGRESS].sort());
       });
 
       it('should resolve and leave the tasks untouched when every update fails', async function () {
@@ -329,7 +322,7 @@ describe('TaskSweeper', () => {
 
         await expect(taskManager.cleanStaleTasks()).toResolve();
 
-        await expect(getTaskStatuses(stage.id as StageId)).resolves.toEqual([TaskOperationStatus.IN_PROGRESS, TaskOperationStatus.IN_PROGRESS]);
+        await expect(getTaskStatuses(stage.id)).resolves.toEqual([TaskOperationStatus.IN_PROGRESS, TaskOperationStatus.IN_PROGRESS]);
       });
     });
   });

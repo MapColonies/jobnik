@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { DrizzleQueryError } from 'drizzle-orm';
 import { getErrorHandlerMiddleware } from '@src/common/utils/error-express-handler';
+import { DatabaseConnectionError } from '@src/db/drizzle';
 
 interface ErrorResponseBody {
   code: string;
@@ -29,6 +30,13 @@ describe('errorExpressHandler', function () {
 
     it('should respond with DATABASE_RELATED_ERROR for a DrizzleQueryError', function () {
       const { status, body } = handleError(new DrizzleQueryError('SELECT 1', [], new Error('connection terminated')));
+
+      expect(status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+      expect(body).toHaveProperty('code', 'DATABASE_RELATED_ERROR');
+    });
+
+    it('should respond with DATABASE_RELATED_ERROR for a DatabaseConnectionError', function () {
+      const { status, body } = handleError(new DatabaseConnectionError('Failed to start a transaction'));
 
       expect(status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
       expect(body).toHaveProperty('code', 'DATABASE_RELATED_ERROR');

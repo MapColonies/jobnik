@@ -22,8 +22,8 @@ import { type NewStage, JobOperationStatus, StageOperationStatus } from '@src/db
 import { StageRepository } from '../DAL/stageRepository';
 import type {
   StageCreateModel,
-  StageEntity,
-  StageEntityOptions,
+  StageRowWithRelations,
+  StageRowOptions,
   StageFindCriteriaArg,
   StageIncludingJob,
   StageModel,
@@ -141,7 +141,7 @@ export class StageManager {
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
     });
 
-    const stage = await this.getStageEntityById(stageId, { includeTasks });
+    const stage = await this.getStageRowById(stageId, { includeTasks });
 
     if (!stage) {
       throw new StageNotFoundError(stagesErrorMessages.stageNotFound);
@@ -216,14 +216,14 @@ export class StageManager {
   }
 
   /**
-   * This method is used to get a stage entity by its id from the database.
+   * This method is used to get a stage row by its id from the database.
    * @param stageId unique identifier of the stage.
-   * @param options options for including related entities.
-   * @returns The stage entity if found, otherwise undefined.
+   * @param options options for including related rows.
+   * @returns The stage row if found, otherwise undefined.
    *
    */
   @withSpanAsyncV4
-  public async getStageEntityById<T extends StageEntityOptions>(stageId: StageId, options: T = {} as T): Promise<StageEntity<T> | undefined> {
+  public async getStageRowById<T extends StageRowOptions>(stageId: StageId, options: T = {} as T): Promise<StageRowWithRelations<T> | undefined> {
     trace.getActiveSpan()?.setAttributes({
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
     });
@@ -243,7 +243,7 @@ export class StageManager {
       [INFRA_CONVENTIONS.infra.jobnik.stage.id]: stageId,
     });
 
-    const stage = (await this.getStageEntityById(stageId, { includeJob: true, tx })) as StageIncludingJob;
+    const stage = (await this.getStageRowById(stageId, { includeJob: true, tx })) as StageIncludingJob;
 
     // update stage summary aggregated task data
     const updatedSummary = await this.stageRepository.updateStageSummary(stageId, summaryUpdatePayload, tx);
@@ -263,7 +263,7 @@ export class StageManager {
 
   @withSpanAsyncV4
   private async executeUpdateStatus(stageId: StageId, targetStatus: StageOperationStatus, tx: DrizzleTx): Promise<void> {
-    const stage = await this.getStageEntityById(stageId, { includeJob: true, tx });
+    const stage = await this.getStageRowById(stageId, { includeJob: true, tx });
 
     if (!stage) {
       throw new StageNotFoundError(stagesErrorMessages.stageNotFound);
@@ -315,7 +315,7 @@ export class StageManager {
 
     await tx.update(stageTable).set({ status: targetStatus, xstate: newPersistedSnapshot }).where(eq(stageTable.id, stageId));
 
-    //#region update related entities
+    //#region update related rows
     // Update job completion when a stage is completed
     // If the stage is marked as completed, and there is a next stage in the job, update the next stage status to PENDING
     if (targetStatus === StageOperationStatus.COMPLETED) {
