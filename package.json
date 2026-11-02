@@ -52,7 +52,7 @@
       "unrs-resolver"
     ],
     "overrides": {
-      "undici": "7.19.1"
+      "undici": "8.12.3"
     }
   }
 }
