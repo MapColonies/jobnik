@@ -179,18 +179,13 @@ docker compose down
 
 ### Docker Build Failures
 
-**Prisma Binary Download Issues:**
-
-If `docker compose up` fails during the build with Prisma-related errors:
+If `docker compose up` fails during the build:
 
 ```bash
-# Option 1: Use cached layers and retry
+# Option 1: Rebuild without cached layers
 docker compose build --no-cache
 
-# Option 2: Check network connectivity
-curl -I https://binaries.prisma.sh
-
-# Option 3: Build with verbose output to see the actual error
+# Option 2: Build with verbose output to see the actual error
 docker compose up --build
 ```
 

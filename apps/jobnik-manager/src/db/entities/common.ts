@@ -27,7 +27,7 @@ export const creationTimeColumn = timestampColumn()
   .default(sql`CURRENT_TIMESTAMP`)
   .notNull();
 
-// Set by the application on insert and update, like Prisma's @updatedAt.
+// Set by the application on insert and update.
 export const updateTimeColumn = timestampColumn()
   .notNull()
   .$onUpdate(() => new Date());

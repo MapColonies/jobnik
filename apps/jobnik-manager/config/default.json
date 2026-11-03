@@ -40,8 +40,7 @@
       "key": "",
       "cert": ""
     },
-    "database": "postgres",
-    "schema": "job_manager"
+    "database": "postgres"
   },
   "staleTasksSweeperCron": {
     "enabled": false,

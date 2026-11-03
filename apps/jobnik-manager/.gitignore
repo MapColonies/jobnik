@@ -112,13 +112,6 @@ dist
 jest_html_reporters.html
 reports
 
-# generated files
-src/db/prisma/generated/*
-# But keep TypedSQL types for Docker builds
-!src/db/prisma/generated/client/
-src/db/prisma/generated/client/*
-!src/db/prisma/generated/client/sql/
-
 # local values
 local-*.json
 local.json
