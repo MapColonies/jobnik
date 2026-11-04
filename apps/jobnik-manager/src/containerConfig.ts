@@ -11,7 +11,7 @@ import { type InjectionObject, registerDependencies } from '@common/dependencyRe
 import { DB_CONNECTION_TIMEOUT, ROUTERS, SERVICES, SERVICE_NAME } from '@common/constants';
 import { getTracing } from '@common/tracing';
 import { getConfig } from './common/config';
-import { assertSupportedDbSchema, createDrizzle } from './db/drizzle';
+import { createDrizzle } from './db/drizzle';
 import { SERVICE_METRICS_SYMBOL, serviceMetricsFactory } from './common/serviceMetrics';
 import { jobV1RouterFactory } from './api/v1/jobs/router';
 import { stageV1RouterFactory } from './api/v1/stages/router';
@@ -26,7 +26,6 @@ export interface RegisterOptions {
 export const registerExternalValues = async (options?: RegisterOptions): Promise<DependencyContainer> => {
   const configInstance = getConfig();
   const dbConfig = configInstance.get('db');
-  assertSupportedDbSchema(dbConfig.schema);
 
   const loggerConfig = configInstance.get('telemetry.logger');
   const loggerRedactionSettings = { paths: ['data', 'response.data'], remove: true };

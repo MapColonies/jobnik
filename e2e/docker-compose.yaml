@@ -16,7 +16,6 @@ services:
       - DB_NAME=jobnik
       - DB_USERNAME=postgres
       - DB_PASSWORD=postgres
-      - DB_SCHEMA=job_manager
       - CONFIG_OFFLINE_MODE=true
     depends_on:
       db:

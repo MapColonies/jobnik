@@ -33,7 +33,7 @@ RUN pnpm --filter ${APP_NAME} deploy --prod --legacy /prod-app
 
 FROM node:${NODE_VERSION}-alpine AS runner
 
-RUN apk add --no-cache dumb-init openssl
+RUN apk add --no-cache dumb-init
 
 ENV NODE_ENV=production
 ENV SERVER_PORT=8080
@@ -41,12 +41,6 @@ ENV SERVER_PORT=8080
 WORKDIR /prod-app
 
 COPY --chown=node:node --from=builder /prod-app .
-
-# npx's find-or-install can false-positive on the pnpm-deployed tree's partial
-# .pnpm/prisma@* store entry: it decides prisma is already present and skips
-# installing it, but never links a runnable bin, so the CLI 404s at exec time.
-# Install it explicitly instead.
-RUN npm install --global prisma@6 && prisma format --check --schema ./dist/db/prisma/schema.prisma
 
 USER node
 WORKDIR /prod-app/dist

@@ -20,19 +20,6 @@ export type DrizzleTx = Parameters<Parameters<Drizzle['transaction']>[0]>[0];
 export type TableFilter<TTable extends keyof typeof relations> = RelationsFilter<(typeof relations)[TTable], typeof relations>;
 
 /**
- * Rejects a configured `db.schema` other than the one the tables are defined in.
- * The table definitions are bound to {@link JOB_MANAGER_SCHEMA}, so any other value would be silently ignored.
- * @param schema - the configured database schema
- */
-export function assertSupportedDbSchema(schema: string): void {
-  if (schema !== JOB_MANAGER_SCHEMA) {
-    throw new Error(
-      `Unsupported db.schema '${schema}': the tables live in the '${JOB_MANAGER_SCHEMA}' schema, so db.schema must be '${JOB_MANAGER_SCHEMA}'`
-    );
-  }
-}
-
-/**
  * Thrown when a transaction fails before its callback runs, for example when no connection can be checked out of the pool.
  * The driver reports such failures as plain errors rather than query errors.
  */
