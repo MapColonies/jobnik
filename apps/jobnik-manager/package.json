@@ -53,7 +53,7 @@
     "@map-colonies/schemas": "^1.24.0",
     "@map-colonies/semantic-conventions": "catalog:",
     "@map-colonies/tracing": "^1.0.0",
-    "@map-colonies/tracing-utils": "^1.0.0",
+    "@map-colonies/tracing-utils": "^2.0.0",
     "@opentelemetry/api": "catalog:",
     "compression": "^1.8.1",
     "date-fns": "^4.1.0",
