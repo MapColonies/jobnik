@@ -1,4 +1,4 @@
-import { generateTypes } from '@map-colonies/openapi-helpers/generators';
+import { generateTypes } from '@map-colonies/openapi-generators';
 import { factory } from 'typescript';
 
 const OPENAPI_PATH = 'openapi3.yaml';

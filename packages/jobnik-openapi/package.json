@@ -39,7 +39,8 @@
   },
   "devDependencies": {
     "@map-colonies/eslint-config": "catalog:",
-    "@map-colonies/openapi-helpers": "catalog:",
+    "@map-colonies/openapi-express-types": "catalog:",
+    "@map-colonies/openapi-generators": "catalog:",
     "@map-colonies/tsconfig": "catalog:",
     "@redocly/cli": "^2.12.4",
     "@types/node": "catalog:",

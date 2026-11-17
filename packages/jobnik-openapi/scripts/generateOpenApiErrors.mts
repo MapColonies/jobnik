@@ -1,4 +1,4 @@
-import { generateErrors } from '@map-colonies/openapi-helpers/generators';
+import { generateErrors } from '@map-colonies/openapi-generators';
 
 const OPENAPI_PATH = 'openapi3.yaml';
 const ERRORS_DESTINATION_PATH = 'src/generated/errors.ts';

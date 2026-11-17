@@ -2,7 +2,7 @@ import { describe, beforeAll, beforeEach, afterEach, afterAll, it, expect, vi } 
 import type { Pool } from 'pg';
 import { StatusCodes } from 'http-status-codes';
 import { initConnection } from '@map-colonies/drizzle-utils';
-import { createRequestSender, type RequestSender } from '@map-colonies/openapi-helpers/requestSender';
+import { createRequestSender, type RequestSender } from '@map-colonies/openapi-supertest';
 import { openapiFilePath, type paths, type operations } from 'jobnik-openapi';
 import { SERVICES } from '@common/constants';
 import { getConfig, initConfig } from '@src/common/config';

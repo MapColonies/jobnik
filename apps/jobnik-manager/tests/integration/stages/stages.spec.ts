@@ -3,12 +3,7 @@ import { describe, beforeEach, afterEach, it, expect, beforeAll } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
 import { StatusCodes } from 'http-status-codes';
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
-import {
-  createRequestSender,
-  expectResponseStatusFactory,
-  type ExpectResponseStatus,
-  type RequestSender,
-} from '@map-colonies/openapi-helpers/requestSender';
+import { createRequestSender, expectResponseStatusFactory, type ExpectResponseStatus, type RequestSender } from '@map-colonies/openapi-supertest';
 import { faker } from '@faker-js/faker';
 import { openapiFilePath, type paths, type operations, type JobId, type StageId } from 'jobnik-openapi';
 import { eq } from 'drizzle-orm';

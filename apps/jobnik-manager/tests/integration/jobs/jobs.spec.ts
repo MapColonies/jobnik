@@ -3,12 +3,7 @@ import { describe, beforeEach, afterEach, it, expect, beforeAll } from 'vitest';
 import type { DependencyContainer } from 'tsyringe';
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
 import { StatusCodes } from 'http-status-codes';
-import {
-  createRequestSender,
-  expectResponseStatusFactory,
-  type ExpectResponseStatus,
-  type RequestSender,
-} from '@map-colonies/openapi-helpers/requestSender';
+import { createRequestSender, expectResponseStatusFactory, type ExpectResponseStatus, type RequestSender } from '@map-colonies/openapi-supertest';
 import { openapiFilePath, type paths, type operations, type JobId } from 'jobnik-openapi';
 import { eq } from 'drizzle-orm';
 import type { Drizzle } from '@src/db/drizzle';

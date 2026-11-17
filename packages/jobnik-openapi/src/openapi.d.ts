@@ -2,7 +2,7 @@
 // This file was auto-generated. Do not edit manually.
 // To update, run the error generation script again.
 
-import type { TypedRequestHandlers as ImportedTypedRequestHandlers } from '@map-colonies/openapi-helpers/typedRequestHandler';
+import type { TypedRequestHandlers as ImportedTypedRequestHandlers } from '@map-colonies/openapi-express-types';
 import type { JobId, StageId, TaskId } from './brands';
 export type paths = {
   '/v1/jobs': {
