@@ -1,4 +1,5 @@
 import createClient, { type Client } from 'openapi-fetch';
+import { fetch as undiciFetch, Request as UndiciRequest } from 'undici';
 import type { paths } from '../types';
 import type { HttpClientOptions } from '../network/httpClient';
 import { createRetryAgent } from '../network/httpClient';
@@ -22,6 +23,12 @@ export function createApiClient(baseUrl: string, httpClientOptions: HttpClientOp
     headers: {
       'Content-Type': 'application/json',
     },
+    // The dispatcher comes from the undici package, so the fetch that uses it has to come from the same package.
+    // Node's built-in fetch bundles its own undici (v7 on Node 24), which cannot drive an undici v8 dispatcher and hangs.
+    fetch: undiciFetch,
+    // openapi-fetch names this option `Request`; undici's fetch cannot read a Request built by Node's built-in undici
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    Request: UndiciRequest,
     dispatcher: createRetryAgent(httpClientOptions, undefined, metrics),
   });
 

@@ -2,7 +2,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, it, expect, afterEach, vi, beforeAll, afterAll, beforeEach, type MockedFunction } from 'vitest';
 import { propagation } from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
-import { MockAgent, type MockPool } from 'undici';
+import { MockAgent, fetch as undiciFetch, Request as UndiciRequest, type MockPool } from 'undici';
 import createClient from 'openapi-fetch';
 import { Registry } from 'prom-client';
 import type { StageId, TaskId } from 'jobnik-openapi';
@@ -79,7 +79,9 @@ describe('Worker', () => {
 
     mockPool = mockAgent.get(baseUrl);
 
-    apiClient = createClient({ dispatcher: mockAgent, baseUrl });
+    // Same undici package for fetch, Request and the mock dispatcher, so this works on any Node version
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    apiClient = createClient({ dispatcher: mockAgent, baseUrl, fetch: undiciFetch, Request: UndiciRequest });
     const workerOptions: WorkerOptions = {
       concurrency: 1,
       taskHandlerCircuitBreaker: { enabled: true },
